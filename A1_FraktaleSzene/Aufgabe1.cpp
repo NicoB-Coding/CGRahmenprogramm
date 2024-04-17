@@ -38,10 +38,15 @@ GLMatrixStack projectionMatrix;
 GLGeometryTransform transformPipeline;
 GLFrustum viewFrustum;
 GLBatch pyramidBatch;
+GLBatch cubeBatch;
 
 
 // Rotationsgroessen
 glm::quat rotation = glm::quat(0, 0, 0, 1);
+
+// bool for levers
+bool bSierpinski = false;
+bool bMengerSponge = false;
 
 // Kamera Translation
 static float xTrans = 0.0f;
@@ -98,8 +103,8 @@ void divideTriangle(GLBatch& batch, GLfloat v0[], GLfloat v1[], GLfloat v2[], GL
 }
 
 void DrawSierpinski() {
-	int depth = 3;  // Setzen Sie die gewünschte Rekursionstiefe
-	int numVertices = 4 * (int)pow(4, depth + 1);  // Berechnung der Anzahl der Vertices
+	int depth = 0;  // Setzen Sie die gewünschte Rekursionstiefe
+	int numVertices = 4 * (int)pow(4, depth+1);  // Berechnung der Anzahl der Vertices
 	pyramidBatch.Begin(GL_TRIANGLES, numVertices);
 
 	GLfloat sierPinski[4][3] = {
@@ -112,6 +117,113 @@ void DrawSierpinski() {
 	pyramidBatch.End();
 }
 
+void divideCube(GLBatch& batch, GLfloat vertices[8][3], int depth) {
+	if (depth == 0) {
+		// draw the cube using triangles
+		// bottom side consists of 2 triangles with vertices 0, 3, 1 and 1, 3, 2 (reversed because of upside down
+		M3DVector3f normal;
+		m3dFindNormal(normal, vertices[0], vertices[3], vertices[1]);
+		batch.Normal3fv(normal);
+		batch.Vertex3fv(vertices[0]);
+		batch.Vertex3fv(vertices[3]);
+		batch.Vertex3fv(vertices[1]);
+
+		m3dFindNormal(normal, vertices[1], vertices[3], vertices[2]);
+		batch.Normal3fv(normal);
+		batch.Vertex3fv(vertices[1]);
+		batch.Vertex3fv(vertices[3]);
+		batch.Vertex3fv(vertices[2]);
+		// front side consists of 2 triangles with vertices 0, 1, 4 and 1, 5, 4
+		m3dFindNormal(normal, vertices[0], vertices[1], vertices[4]);
+		batch.Normal3fv(normal);
+		batch.Vertex3fv(vertices[0]);
+		batch.Vertex3fv(vertices[1]);
+		batch.Vertex3fv(vertices[4]);
+
+		m3dFindNormal(normal, vertices[1], vertices[5], vertices[4]);
+		batch.Normal3fv(normal);
+		batch.Vertex3fv(vertices[1]);
+		batch.Vertex3fv(vertices[5]);
+		batch.Vertex3fv(vertices[4]);
+		 // right side consists of 2 triangles with vertices 1, 2, 5 and 2, 6, 5
+		m3dFindNormal(normal, vertices[1], vertices[2], vertices[5]);
+		batch.Normal3fv(normal);
+		batch.Vertex3fv(vertices[1]);
+		batch.Vertex3fv(vertices[2]);
+		batch.Vertex3fv(vertices[5]);
+
+		m3dFindNormal(normal, vertices[2], vertices[6], vertices[5]);
+		batch.Normal3fv(normal);
+		batch.Vertex3fv(vertices[2]);
+		batch.Vertex3fv(vertices[6]);
+		batch.Vertex3fv(vertices[5]);
+		// back side consists of 2 triangles with vertices 2, 3, 6 and 3, 7, 6
+		m3dFindNormal(normal, vertices[2], vertices[3], vertices[6]);
+		batch.Normal3fv(normal);
+		batch.Vertex3fv(vertices[2]);
+		batch.Vertex3fv(vertices[3]);
+		batch.Vertex3fv(vertices[6]);
+
+		m3dFindNormal(normal, vertices[3], vertices[7], vertices[6]);
+		batch.Normal3fv(normal);
+		batch.Vertex3fv(vertices[3]);
+		batch.Vertex3fv(vertices[7]);
+		batch.Vertex3fv(vertices[6]);
+		// left side consists of 2 triangles with vertices 0, 4, 3 and 4, 7, 3
+		m3dFindNormal(normal, vertices[0], vertices[4], vertices[3]);
+		batch.Normal3fv(normal);
+		batch.Vertex3fv(vertices[0]);
+		batch.Vertex3fv(vertices[4]);
+		batch.Vertex3fv(vertices[3]);
+
+		m3dFindNormal(normal, vertices[4], vertices[7], vertices[3]);
+		batch.Normal3fv(normal);
+		batch.Vertex3fv(vertices[4]);
+		batch.Vertex3fv(vertices[7]);
+		batch.Vertex3fv(vertices[3]);
+		// top side consists of 2 triangles with vertices 4, 5, 7 and 5, 6, 7
+		m3dFindNormal(normal, vertices[4], vertices[5], vertices[7]);
+		batch.Normal3fv(normal);
+		batch.Vertex3fv(vertices[4]);
+		batch.Vertex3fv(vertices[5]);
+		batch.Vertex3fv(vertices[7]);
+
+		m3dFindNormal(normal, vertices[5], vertices[6], vertices[7]);
+		batch.Normal3fv(normal);
+		batch.Vertex3fv(vertices[5]);
+		batch.Vertex3fv(vertices[6]);
+		batch.Vertex3fv(vertices[7]);
+	}
+	else {
+		GLfloat mid[20][8][3];
+		for (int i = 0; i < 20; i++) {
+			// each stage of the menger sponge is divided into 20 cubes
+			for (int j = 0; j < 8; j++) {
+				// divide each cube into 8 subcubes, by splitting each edge into 3 parts
+
+			}
+		}
+	}
+
+}
+void DrawMengerSponge() {
+	// define the vertices of the cube
+	GLfloat vertices[8][3] = {
+		{-1.0f, -1.0f, -1.0f}, // v0
+		{1.0f, -1.0f, -1.0f}, // v1
+		{1.0f, 1.0f, -1.0f}, // v2
+		{-1.0f, 1.0f, -1.0f}, // v3
+		{-1.0f, -1.0f, 1.0f}, // v4
+		{1.0f, -1.0f, 1.0f}, // v5
+		{1.0f, 1.0f, 1.0f}, // v6
+		{-1.0f, 1.0f, 1.0f} // v7
+	};
+	int depth = 0;
+	int numVertices = 8 * (int)pow(20, depth+1); // 8 cubes on top, 8 cubes on bottom , 4 cubes in the middle times 8 vertices per cube
+	cubeBatch.Begin(GL_TRIANGLES, numVertices);
+	divideCube(cubeBatch, vertices, depth);
+	cubeBatch.End();
+}
 //GUI
 TwBar *bar;
 void InitGUI()
@@ -120,14 +232,16 @@ void InitGUI()
 	TwDefine(" TweakBar size='200 400'");
 	TwAddVarRW(bar,"Model Rotation",TW_TYPE_QUAT4F, &rotation, "");
 	//Hier weitere GUI Variablen anlegen. Für Farbe z.B. den Typ TW_TYPE_COLOR4F benutzen
+	// Add button to check if siepinski is drawn
+	TwAddVarRW(bar, "Draw Sierpinski", TW_TYPE_BOOLCPP, &bSierpinski, " label='Draw Sierpinski' ");
+	// Add button to check if menge sponge is drawn
+	TwAddVarRW(bar, "Draw Menger Sponge", TW_TYPE_BOOLCPP, &bMengerSponge, " label='Draw Menger Sponge' ");
 }
 
 void CreateGeometry()
 {
-	//Würfel der Größe 10 erzeugen
-	//gltMakeCube(geometry, 10.0f);
 	DrawSierpinski();
-
+	DrawMengerSponge();
 }
 
 // Aufruf draw scene
@@ -157,7 +271,13 @@ void RenderScene(void) {
 	GLfloat vColor[] = { 0.0f, 1.0f, 1.0f, 1.0f };
 	shaderManager.UseStockShader(GLT_SHADER_DEFAULT_LIGHT, transformPipeline.GetModelViewMatrix(), transformPipeline.GetProjectionMatrix(), vColor);
 
-	pyramidBatch.Draw();
+	// Draw the Sierpinski pyramid if bSierpinski is true
+	if (bSierpinski) {
+		pyramidBatch.Draw();
+	}
+	if (bMengerSponge) {
+		cubeBatch.Draw();
+	}
 
 	modelViewMatrix.PopMatrix();
 	gltCheckErrors();
@@ -165,8 +285,6 @@ void RenderScene(void) {
 	glutSwapBuffers();
 	glutPostRedisplay();
 }
-
-
 
 // Initialisierung des Rendering Kontextes
 void SetupRC()
@@ -266,12 +384,9 @@ void SpecialKeys(int key, int x, int y)
 	glutPostRedisplay();
 }
 
-
-
-
 void ChangeSize(int w, int h)
 {
-	GLfloat nRange = 100.0f;
+	GLfloat nRange = 200.0f;
 
 	// Verhindere eine Division durch Null
 	if(h == 0)
