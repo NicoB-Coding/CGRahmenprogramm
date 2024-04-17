@@ -12,7 +12,7 @@ Realisieren Sie Ihre "fraktale Szene" wie in "A1_Versuch1a" dargestellt,
 d.h. für OpenGL mit Hilfe der GLBatch-Klasse aus der GLTools-Library und den Methoden 
 ".Begin/.End", sowie .Vertex3f und Color4f.
 */
-
+// dddd
 #include <iostream>
 #ifdef WIN32
 #include <windows.h>
