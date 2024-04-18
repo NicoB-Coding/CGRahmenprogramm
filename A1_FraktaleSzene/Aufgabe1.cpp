@@ -12,7 +12,6 @@ Realisieren Sie Ihre "fraktale Szene" wie in "A1_Versuch1a" dargestellt,
 d.h. für OpenGL mit Hilfe der GLBatch-Klasse aus der GLTools-Library und den Methoden 
 ".Begin/.End", sowie .Vertex3f und Color4f.
 */
-// dddd
 #include <iostream>
 #ifdef WIN32
 #include <windows.h>
@@ -40,13 +39,15 @@ GLFrustum viewFrustum;
 GLBatch pyramidBatch;
 GLBatch cubeBatch;
 
-
 // Rotationsgroessen
 glm::quat rotation = glm::quat(0, 0, 0, 1);
 
 // bool for levers
 bool bSierpinski = false;
 bool bMengerSponge = false;
+// depth of recursion for sierpinski and menger sponge
+int depth = 0;
+int prevDepth = 0;
 
 // Kamera Translation
 static float xTrans = 0.0f;
@@ -59,6 +60,10 @@ void m3dMidPoint(float result[3], const float a[3], const float b[3]) {
 	result[2] = (a[2] + b[2]) / 2.0f;
 }
 
+
+// TO-DO: Matrizen-Stapel für die Transformationen
+// Idee: Pro Rekursionsstufe wird die Matrix-Skalierung kleiner, damit ich zum schluss weiß wie groß die einzelnen Dreiecke sind
+// und wie ich sie verschieben muss. Dann wird ein Dreieck immer um Höhe eines Dreiecks in die Höhe verschoben, um differenz Punkt links unten zu oben in x Richtung und um 
 // this function divides a triangle into four subtriangles recursively until depth is 0
 void divideTriangle(GLBatch& batch, GLfloat v0[], GLfloat v1[], GLfloat v2[], GLfloat v3[], int depth) {
     if (depth == 0) {
@@ -103,7 +108,6 @@ void divideTriangle(GLBatch& batch, GLfloat v0[], GLfloat v1[], GLfloat v2[], GL
 }
 
 void DrawSierpinski() {
-	int depth = 0;  // Setzen Sie die gewünschte Rekursionstiefe
 	int numVertices = 4 * (int)pow(4, depth+1);  // Berechnung der Anzahl der Vertices
 	pyramidBatch.Begin(GL_TRIANGLES, numVertices);
 
@@ -218,7 +222,6 @@ void DrawMengerSponge() {
 		{1.0f, 1.0f, 1.0f}, // v6
 		{-1.0f, 1.0f, 1.0f} // v7
 	};
-	int depth = 0;
 	int numVertices = 8 * (int)pow(20, depth+1); // 8 cubes on top, 8 cubes on bottom , 4 cubes in the middle times 8 vertices per cube
 	cubeBatch.Begin(GL_TRIANGLES, numVertices);
 	divideCube(cubeBatch, vertices, depth);
@@ -236,6 +239,9 @@ void InitGUI()
 	TwAddVarRW(bar, "Draw Sierpinski", TW_TYPE_BOOLCPP, &bSierpinski, " label='Draw Sierpinski' ");
 	// Add button to check if menge sponge is drawn
 	TwAddVarRW(bar, "Draw Menger Sponge", TW_TYPE_BOOLCPP, &bMengerSponge, " label='Draw Menger Sponge' ");
+	// Add button to change the depth of the recursion, if the value is changed we need to draw the geometry again
+	TwAddVarRW(bar, "Depth", TW_TYPE_INT32, &depth, " label='Depth' ");
+
 }
 
 void CreateGeometry()
@@ -246,9 +252,18 @@ void CreateGeometry()
 
 // Aufruf draw scene
 void RenderScene(void) {
+
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	modelViewMatrix.PushMatrix();
+	// has the depth of the recursion changed?
+	if (prevDepth != depth) {
+		// clear the batches
+		pyramidBatch.Reset();
+		pyramidBatch = GLBatch();
+		cubeBatch.Reset();
+		CreateGeometry();
+	}
 	modelViewMatrix.Translate(xTrans, yTrans, zTrans);
 	glm::mat4 rot = glm::mat4_cast(rotation);
 	modelViewMatrix.MultMatrix(glm::value_ptr(rot));
@@ -278,6 +293,8 @@ void RenderScene(void) {
 	if (bMengerSponge) {
 		cubeBatch.Draw();
 	}
+	// save the depth of the recursion
+	prevDepth = depth;
 
 	modelViewMatrix.PopMatrix();
 	gltCheckErrors();
@@ -323,7 +340,7 @@ void SetupRC()
 	GLfloat matAmbient[] = { 0.7f, 0.7f, 0.7f, 1.0f };
 	GLfloat matDiffuse[] = { 0.8f, 0.8f, 0.8f, 1.0f };
 	GLfloat matSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-	GLfloat shininess = 50.0f;
+	GLfloat shininess = 40.0f;
 
 	glMaterialfv(GL_FRONT, GL_AMBIENT, matAmbient);
 	glMaterialfv(GL_FRONT, GL_DIFFUSE, matDiffuse);
@@ -337,19 +354,19 @@ void SetupRC()
 
 void SpecialKeys(int key, int x, int y)
 {
-	float angleStep = 5.0f;  // Rotationswinkel in Grad
+	float angleStep = 8.0f;  // Rotationswinkel in Grad
 
 	switch (key)
 	{
 	case GLUT_KEY_UP: // 101
 		// Vorwärts bewegen
-		zTrans -= 1.0f;
+		//zTrans -= 1.0f;
 		// Rotation um die X-Achse
 		rotation = glm::rotate(rotation, glm::radians(-angleStep), glm::vec3(1.0f, 0.0f, 0.0f));
 		break;
 	case GLUT_KEY_DOWN: // 103
 		// Rückwärts bewegen
-		zTrans += 1.0f;
+		//zTrans += 1.0f;
 		// Rotation um die X-Achse
 		rotation = glm::rotate(rotation, glm::radians(angleStep), glm::vec3(1.0f, 0.0f, 0.0f));
 		break;
@@ -418,7 +435,7 @@ int main(int argc, char* argv[])
 {
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
-	glutInitWindowSize(800,600);
+	glutInitWindowSize(1000,800);
 	glutCreateWindow("Aufgabe1");
 	glutCloseFunc(ShutDownRC);
 	
