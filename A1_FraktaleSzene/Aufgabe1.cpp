@@ -39,6 +39,23 @@ GLFrustum viewFrustum;
 GLBatch pyramidBatch;
 GLBatch cubeBatch;
 
+GLfloat cube_strip[14][3] = {
+	{-1.f, 1.f, 1.f},     // Front-top-left
+	{1.f, 1.f, 1.f},      // Front-top-right
+	{-1.f, -1.f, 1.f},    // Front-bottom-left
+	{1.f, -1.f, 1.f},     // Front-bottom-right
+	{1.f, -1.f, -1.f },    // Back-bottom-right
+	{1.f, 1.f, 1.f},      // Front-top-right
+	{1.f, 1.f, -1.f},     // Back-top-right
+	{-1.f, 1.f, 1.f},     // Front-top-left
+	{-1.f, 1.f, -1.f},    // Back-top-left
+	{-1.f, -1.f, 1.f},    // Front-bottom-left
+	{-1.f, -1.f, -1.f},   // Back-bottom-left
+	{1.f, -1.f, -1.f},    // Back-bottom-right
+	{-1.f, 1.f, -1.f},    // Back-top-left
+	{1.f, 1.f, -1.f}      // Back-top-right
+};
+
 // Rotationsgroessen
 glm::quat rotation = glm::quat(0, 0, 0, 1);
 
@@ -60,36 +77,36 @@ void m3dMidPoint(float result[3], const float a[3], const float b[3]) {
 	result[2] = (a[2] + b[2]) / 2.0f;
 }
 
-
-// TO-DO: Matrizen-Stapel für die Transformationen
-// Idee: Pro Rekursionsstufe wird die Matrix-Skalierung kleiner, damit ich zum schluss weiß wie groß die einzelnen Dreiecke sind
-// und wie ich sie verschieben muss. Dann wird ein Dreieck immer um Höhe eines Dreiecks in die Höhe verschoben, um differenz Punkt links unten zu oben in x Richtung und um 
 // this function divides a triangle into four subtriangles recursively until depth is 0
 void divideTriangle(GLBatch& batch, GLfloat v0[], GLfloat v1[], GLfloat v2[], GLfloat v3[], int depth) {
     if (depth == 0) {
-		M3DVector3f normal;
-		m3dFindNormal(normal, v0, v2, v1);
-		batch.Normal3fv(normal);
+		// red color
+		batch.Color4f(1.0f, 0.0f, 0.0f, 1.0f);
         batch.Vertex3fv(v0);
+		batch.Color4f(1.0f, 0.0f, 0.0f, 1.0f);
         batch.Vertex3fv(v2);
+		batch.Color4f(1.0f, 0.0f, 0.0f, 1.0f);
         batch.Vertex3fv(v1);
-
-        m3dFindNormal(normal, v0, v1, v3);
-		batch.Normal3fv(normal);
+		 // magenta color
+		batch.Color4f(1.0f, 0.0f, 1.0f, 1.0f);
         batch.Vertex3fv(v0);
+		batch.Color4f(1.0f, 0.0f, 1.0f, 1.0f);
         batch.Vertex3fv(v1);
+		batch.Color4f(1.0f, 0.0f, 1.0f, 1.0f);
         batch.Vertex3fv(v3);
-
-        m3dFindNormal(normal, v0, v3, v2);
-		batch.Normal3fv(normal);
+		// blue color
+		batch.Color4f(0.0f, 0.0f, 1.0f, 1.0f);
         batch.Vertex3fv(v0);
+		batch.Color4f(0.0f, 0.0f, 1.0f, 1.0f);
         batch.Vertex3fv(v3);
+		batch.Color4f(0.0f, 0.0f, 1.0f, 1.0f);
         batch.Vertex3fv(v2);
-
-        m3dFindNormal(normal, v1, v2, v3);
-		batch.Normal3fv(normal);
+		// green color
+		batch.Color4f(0.0f, 1.0f, 0.0f, 1.0f);
         batch.Vertex3fv(v1);
+		batch.Color4f(0.0f, 1.0f, 0.0f, 1.0f);
         batch.Vertex3fv(v2);
+		batch.Color4f(0.0f, 1.0f, 0.0f, 1.0f);
         batch.Vertex3fv(v3);
     }
     else {
@@ -121,111 +138,56 @@ void DrawSierpinski() {
 	pyramidBatch.End();
 }
 
-void divideCube(GLBatch& batch, GLfloat vertices[8][3], int depth) {
+void divideCube(GLBatch& batch, int depth) {
+	float length; // length of the cube
 	if (depth == 0) {
-		// draw the cube using triangles
-		// bottom side consists of 2 triangles with vertices 0, 3, 1 and 1, 3, 2 (reversed because of upside down
-		M3DVector3f normal;
-		m3dFindNormal(normal, vertices[0], vertices[3], vertices[1]);
-		batch.Normal3fv(normal);
-		batch.Vertex3fv(vertices[0]);
-		batch.Vertex3fv(vertices[3]);
-		batch.Vertex3fv(vertices[1]);
-
-		m3dFindNormal(normal, vertices[1], vertices[3], vertices[2]);
-		batch.Normal3fv(normal);
-		batch.Vertex3fv(vertices[1]);
-		batch.Vertex3fv(vertices[3]);
-		batch.Vertex3fv(vertices[2]);
-		// front side consists of 2 triangles with vertices 0, 1, 4 and 1, 5, 4
-		m3dFindNormal(normal, vertices[0], vertices[1], vertices[4]);
-		batch.Normal3fv(normal);
-		batch.Vertex3fv(vertices[0]);
-		batch.Vertex3fv(vertices[1]);
-		batch.Vertex3fv(vertices[4]);
-
-		m3dFindNormal(normal, vertices[1], vertices[5], vertices[4]);
-		batch.Normal3fv(normal);
-		batch.Vertex3fv(vertices[1]);
-		batch.Vertex3fv(vertices[5]);
-		batch.Vertex3fv(vertices[4]);
-		 // right side consists of 2 triangles with vertices 1, 2, 5 and 2, 6, 5
-		m3dFindNormal(normal, vertices[1], vertices[2], vertices[5]);
-		batch.Normal3fv(normal);
-		batch.Vertex3fv(vertices[1]);
-		batch.Vertex3fv(vertices[2]);
-		batch.Vertex3fv(vertices[5]);
-
-		m3dFindNormal(normal, vertices[2], vertices[6], vertices[5]);
-		batch.Normal3fv(normal);
-		batch.Vertex3fv(vertices[2]);
-		batch.Vertex3fv(vertices[6]);
-		batch.Vertex3fv(vertices[5]);
-		// back side consists of 2 triangles with vertices 2, 3, 6 and 3, 7, 6
-		m3dFindNormal(normal, vertices[2], vertices[3], vertices[6]);
-		batch.Normal3fv(normal);
-		batch.Vertex3fv(vertices[2]);
-		batch.Vertex3fv(vertices[3]);
-		batch.Vertex3fv(vertices[6]);
-
-		m3dFindNormal(normal, vertices[3], vertices[7], vertices[6]);
-		batch.Normal3fv(normal);
-		batch.Vertex3fv(vertices[3]);
-		batch.Vertex3fv(vertices[7]);
-		batch.Vertex3fv(vertices[6]);
-		// left side consists of 2 triangles with vertices 0, 4, 3 and 4, 7, 3
-		m3dFindNormal(normal, vertices[0], vertices[4], vertices[3]);
-		batch.Normal3fv(normal);
-		batch.Vertex3fv(vertices[0]);
-		batch.Vertex3fv(vertices[4]);
-		batch.Vertex3fv(vertices[3]);
-
-		m3dFindNormal(normal, vertices[4], vertices[7], vertices[3]);
-		batch.Normal3fv(normal);
-		batch.Vertex3fv(vertices[4]);
-		batch.Vertex3fv(vertices[7]);
-		batch.Vertex3fv(vertices[3]);
-		// top side consists of 2 triangles with vertices 4, 5, 7 and 5, 6, 7
-		m3dFindNormal(normal, vertices[4], vertices[5], vertices[7]);
-		batch.Normal3fv(normal);
-		batch.Vertex3fv(vertices[4]);
-		batch.Vertex3fv(vertices[5]);
-		batch.Vertex3fv(vertices[7]);
-
-		m3dFindNormal(normal, vertices[5], vertices[6], vertices[7]);
-		batch.Normal3fv(normal);
-		batch.Vertex3fv(vertices[5]);
-		batch.Vertex3fv(vertices[6]);
-		batch.Vertex3fv(vertices[7]);
+		// draw the cube using triangle strip vertices with the sequence of vertices: 4 3 7 8 5 3 1 4 2 7 6 5 2 1
+		// we already have the correct scaling and translation in the matrix stack
+		// we just need to draw the cube
+		batch.Begin(GL_TRIANGLE_STRIP, 14);
+		for (int i = 0; i < 14; i++) {
+			// make the cube pink
+			batch.Color4f(1.0f, 0.0f, 1.0f, 1.0f);
+			batch.Vertex3fv(cube_strip[i]);
+		}
+		batch.End();
 	}
 	else {
-		GLfloat mid[20][8][3];
-		for (int i = 0; i < 20; i++) {
-			// each stage of the menger sponge is divided into 20 cubes
-			for (int j = 0; j < 8; j++) {
-				// divide each cube into 8 subcubes, by splitting each edge into 3 parts
+		// we want to know the depth of the recursion to determine the size of our cube
+		// then we put the scaled size of the cube in our matrix stack to pop it out later for drawing
+		modelViewMatrix.PushMatrix();
+		length = 2.0f / (float)pow(3, depth);
+		modelViewMatrix.Scale(length, length, length);
+		// draw the 20 cubes
+		for (int i = 0; i < 2; i++) {
+			modelViewMatrix.PushMatrix();
+			// translate the cube to the correct position
+			switch (i) {
+				case 0:
+					modelViewMatrix.Translate(-length, length, length);
+					break;
+				case 1:
+					modelViewMatrix.Translate(length, length, length);
+					break;
+				case 2:
+					modelViewMatrix.Translate(-length, -length, length);
+					break;
+				case 3:
+					modelViewMatrix.Translate(length, -length, length);
+					break;
+				case 4:
+					modelViewMatrix.Translate(length, -length, -length);
+					break;
 
 			}
+			divideCube(batch, depth - 1);
+			modelViewMatrix.PopMatrix();
 		}
+		modelViewMatrix.PopMatrix();
 	}
-
 }
 void DrawMengerSponge() {
-	// define the vertices of the cube
-	GLfloat vertices[8][3] = {
-		{-1.0f, -1.0f, -1.0f}, // v0
-		{1.0f, -1.0f, -1.0f}, // v1
-		{1.0f, 1.0f, -1.0f}, // v2
-		{-1.0f, 1.0f, -1.0f}, // v3
-		{-1.0f, -1.0f, 1.0f}, // v4
-		{1.0f, -1.0f, 1.0f}, // v5
-		{1.0f, 1.0f, 1.0f}, // v6
-		{-1.0f, 1.0f, 1.0f} // v7
-	};
-	int numVertices = 8 * (int)pow(20, depth+1); // 8 cubes on top, 8 cubes on bottom , 4 cubes in the middle times 8 vertices per cube
-	cubeBatch.Begin(GL_TRIANGLES, numVertices);
-	divideCube(cubeBatch, vertices, depth);
-	cubeBatch.End();
+	divideCube(cubeBatch, depth);
 }
 //GUI
 TwBar *bar;
@@ -241,7 +203,6 @@ void InitGUI()
 	TwAddVarRW(bar, "Draw Menger Sponge", TW_TYPE_BOOLCPP, &bMengerSponge, " label='Draw Menger Sponge' ");
 	// Add button to change the depth of the recursion, if the value is changed we need to draw the geometry again
 	TwAddVarRW(bar, "Depth", TW_TYPE_INT32, &depth, " label='Depth' ");
-
 }
 
 void CreateGeometry()
@@ -262,29 +223,30 @@ void RenderScene(void) {
 		pyramidBatch.Reset();
 		pyramidBatch = GLBatch();
 		cubeBatch.Reset();
+		cubeBatch = GLBatch();
 		CreateGeometry();
 	}
 	modelViewMatrix.Translate(xTrans, yTrans, zTrans);
 	glm::mat4 rot = glm::mat4_cast(rotation);
 	modelViewMatrix.MultMatrix(glm::value_ptr(rot));
-	modelViewMatrix.Translate(0.0f, 0.0f, 100.0f);
-	modelViewMatrix.Scale(40.0f, 40.0f, 40.0f);
 
 	// Konvertiere GLMatrixStack zu glm::mat4
-	glm::mat4 mvMatrix = glm::make_mat4(modelViewMatrix.GetMatrix());
+	//glm::mat4 mvMatrix = glm::make_mat4(modelViewMatrix.GetMatrix());
 
 	// Definiere und transformiere die Lichtpositionen mit GLM
-	glm::vec4 lightPosition0 = glm::vec4(-75.0f, 150.0f, 100.0f, 1.0f);
-	glm::vec4 lightPosition1 = glm::vec4(75.0f, 150.0f, 100.0f, 1.0f);
+	//glm::vec4 lightPosition0 = glm::vec4(-75.0f, 150.0f, 100.0f, 1.0f);
+	//glm::vec4 lightPosition1 = glm::vec4(75.0f, 150.0f, 100.0f, 1.0f);
 
-	lightPosition0 = mvMatrix * lightPosition0;
-	lightPosition1 = mvMatrix * lightPosition1;
+	//lightPosition0 = mvMatrix * lightPosition0;
+	//lightPosition1 = mvMatrix * lightPosition1;
 
-	glLightfv(GL_LIGHT0, GL_POSITION, &lightPosition0[0]);
-	glLightfv(GL_LIGHT1, GL_POSITION, &lightPosition1[0]);
+	//glLightfv(GL_LIGHT0, GL_POSITION, &lightPosition0[0]);
+	//glLightfv(GL_LIGHT1, GL_POSITION, &lightPosition1[0]);
 
-	GLfloat vColor[] = { 0.0f, 1.0f, 1.0f, 1.0f };
-	shaderManager.UseStockShader(GLT_SHADER_DEFAULT_LIGHT, transformPipeline.GetModelViewMatrix(), transformPipeline.GetProjectionMatrix(), vColor);
+	//GLfloat vColor[] = { 0.0f, 1.0f, 1.0f, 1.0f };
+	//shaderManager.UseStockShader(GLT_SHADER_DEFAULT_LIGHT, transformPipeline.GetModelViewMatrix(), transformPipeline.GetProjectionMatrix(), vColor);
+	shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewProjectionMatrix());
+
 
 	// Draw the Sierpinski pyramid if bSierpinski is true
 	if (bSierpinski) {
@@ -306,13 +268,13 @@ void RenderScene(void) {
 // Initialisierung des Rendering Kontextes
 void SetupRC()
 {
-	// gelber Hintergrund
-	glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
-
+	// Schwarzer Hintergrund
+	glClearColor(0.2f, 0.2f, 1.0f, 1.0f);
 	//glFrontFace(GL_CW);
 	// Backface Culling aktivieren
 	glEnable(GL_CULL_FACE);
 	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_LIGHTING);
 
 	//initialisiert die standard shader
 	shaderManager.InitializeStockShaders();
@@ -320,12 +282,12 @@ void SetupRC()
 	transformPipeline.SetMatrixStacks(modelViewMatrix,projectionMatrix);
 
 	// Setup von Licht
-	GLfloat ambientLight[] = { 0.2f, 0.2f, 0.2f, 1.0f };
+	/*GLfloat ambientLight[] = {0.2f, 0.2f, 0.2f, 1.0f};
 	GLfloat diffuseLight[] = { 0.8f, 0.8f, 0.8f, 1.0f };
 	GLfloat specular[] = { 0.9f, 0.9f, 0.9f, 1.0f };
 	GLfloat lightPos[] = { -75.0f, 150.0f, 100.0f, 1.0f };
 
-	glEnable(GL_LIGHTING);
+	//glEnable(GL_LIGHTING);
 	glLightModelfv(GL_LIGHT_MODEL_AMBIENT, ambientLight);
 	glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuseLight);
 	glLightfv(GL_LIGHT0, GL_SPECULAR, specular);
@@ -345,7 +307,7 @@ void SetupRC()
 	glMaterialfv(GL_FRONT, GL_AMBIENT, matAmbient);
 	glMaterialfv(GL_FRONT, GL_DIFFUSE, matDiffuse);
 	glMaterialfv(GL_FRONT, GL_SPECULAR, matSpecular);
-	glMaterialf(GL_FRONT, GL_SHININESS, shininess);
+	glMaterialf(GL_FRONT, GL_SHININESS, shininess);*/
 
 	//erzeuge die geometrie
 	CreateGeometry();
@@ -403,7 +365,7 @@ void SpecialKeys(int key, int x, int y)
 
 void ChangeSize(int w, int h)
 {
-	GLfloat nRange = 200.0f;
+	GLfloat nRange = 10.0f;
 
 	// Verhindere eine Division durch Null
 	if(h == 0)
