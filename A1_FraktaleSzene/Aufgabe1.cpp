@@ -37,6 +37,7 @@ GLMatrixStack projectionMatrix;
 GLGeometryTransform transformPipeline;
 GLFrustum viewFrustum;
 GLBatch pyramidBatch;
+// create GLBatch for the menger sponge
 GLBatch cubeBatch;
 
 GLfloat cube_strip[14][3] = {
@@ -63,8 +64,17 @@ glm::quat rotation = glm::quat(0, 0, 0, 1);
 bool bSierpinski = false;
 bool bMengerSponge = false;
 // depth of recursion for sierpinski and menger sponge
-int depth = 0;
+int depth = 2;
 int prevDepth = 0;
+GLfloat globalScale = 1.0f;
+int lameCounter = 0;
+
+
+bool bDepth = true;
+
+// length of the cube
+float currentLength = 2.0f;
+float mengerScaleFactor = 1.0f; 
 
 // Kamera Translation
 static float xTrans = 0.0f;
@@ -138,57 +148,63 @@ void DrawSierpinski() {
 	pyramidBatch.End();
 }
 
-void divideCube(GLBatch& batch, int depth) {
-	float length; // length of the cube
-	if (depth == 0) {
-		// draw the cube using triangle strip vertices with the sequence of vertices: 4 3 7 8 5 3 1 4 2 7 6 5 2 1
-		// we already have the correct scaling and translation in the matrix stack
-		// we just need to draw the cube
-		batch.Begin(GL_TRIANGLE_STRIP, 14);
-		for (int i = 0; i < 14; i++) {
-			// make the cube pink
-			batch.Color4f(1.0f, 0.0f, 1.0f, 1.0f);
-			batch.Vertex3fv(cube_strip[i]);
+void drawCube(GLBatch& batch) {
+	batch.Begin(GL_TRIANGLE_STRIP, 14);
+	// each side of the cube is drawn with a different color
+	// red
+
+	for (int i = 0; i < 14; i++) {
+		// färbe den Vertex mit rot, grün oder blau ein
+		if (i < 4) {
+			batch.Color4f(1.0f, 0.0f, 0.0f, 1.0f);
 		}
-		batch.End();
+		else if (i < 8) {
+			batch.Color4f(0.0f, 1.0f, 0.0f, 1.0f);
+		}
+		else if (i < 12) {
+			batch.Color4f(0.0f, 0.0f, 1.0f, 1.0f);
+		}
+		else {
+			batch.Color4f(1.0f, 1.0f, 0.0f, 1.0f);
+		}
+		//berechne die normale
+		batch.Normal3fv(cube_strip[i]);
+		batch.Vertex3fv(cube_strip[i]);
+	}
+	batch.End();
+}
+
+void drawMenger(int mengerDepth) {
+	if (mengerDepth == 0) {
+		// Grundfall: Zeichne einen einzelnen Würfel
+		shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewMatrix(), transformPipeline.GetProjectionMatrix());
+		cubeBatch.Draw();
 	}
 	else {
-		// we want to know the depth of the recursion to determine the size of our cube
-		// then we put the scaled size of the cube in our matrix stack to pop it out later for drawing
-		modelViewMatrix.PushMatrix();
-		length = 2.0f / (float)pow(3, depth);
-		modelViewMatrix.Scale(length, length, length);
-		// draw the 20 cubes
-		for (int i = 0; i < 2; i++) {
-			modelViewMatrix.PushMatrix();
-			// translate the cube to the correct position
-			switch (i) {
-				case 0:
-					modelViewMatrix.Translate(-length, length, length);
-					break;
-				case 1:
-					modelViewMatrix.Translate(length, length, length);
-					break;
-				case 2:
-					modelViewMatrix.Translate(-length, -length, length);
-					break;
-				case 3:
-					modelViewMatrix.Translate(length, -length, length);
-					break;
-				case 4:
-					modelViewMatrix.Translate(length, -length, -length);
-					break;
+		// Rekursiver Fall: Erzeuge 20 kleinere Würfel
+		for (int j = -1; j <= 1; j++) {
+			for (int k = -1; k <= 1; k++) {
+				for (int l = -1; l <= 1; l++) {
+					// Korrektur: Entferne nur den zentralen Würfel jeder Schicht
+					if ((j == 0 && k == 0) || (j == 0 && l == 0) || (k == 0 && l == 0)) {
+						if (mengerDepth > 1) {
 
+						}
+						continue;
+					}
+					modelViewMatrix.PushMatrix();
+					float scale = currentLength * pow(3, mengerDepth-1);
+					modelViewMatrix.Translate(j*scale, k*scale, l*scale);
+					// Rekursiver Aufruf für jeden Würfel
+					drawMenger(mengerDepth - 1);
+					modelViewMatrix.PopMatrix();
+				}
 			}
-			divideCube(batch, depth - 1);
-			modelViewMatrix.PopMatrix();
 		}
-		modelViewMatrix.PopMatrix();
 	}
 }
-void DrawMengerSponge() {
-	divideCube(cubeBatch, depth);
-}
+
+
 //GUI
 TwBar *bar;
 void InitGUI()
@@ -201,60 +217,57 @@ void InitGUI()
 	TwAddVarRW(bar, "Draw Sierpinski", TW_TYPE_BOOLCPP, &bSierpinski, " label='Draw Sierpinski' ");
 	// Add button to check if menge sponge is drawn
 	TwAddVarRW(bar, "Draw Menger Sponge", TW_TYPE_BOOLCPP, &bMengerSponge, " label='Draw Menger Sponge' ");
-	// Add button to change the depth of the recursion, if the value is changed we need to draw the geometry again
-	TwAddVarRW(bar, "Depth", TW_TYPE_INT32, &depth, " label='Depth' ");
+	// Add button to change the depth (max of 3) of the recursion, if the value is changed we need to draw the geometry again
+	TwAddVarRW(bar, "Depth", TW_TYPE_INT32, &depth, " label='Depth' min=0 max=3 ");
+	// add sensitive slider for the scaling of the geometry
+	TwAddVarRW(bar, "Scale", TW_TYPE_FLOAT, &globalScale, " label='Scale' min=0.1 max=10 step=0.1 ");
 }
 
 void CreateGeometry()
 {
 	DrawSierpinski();
-	DrawMengerSponge();
+	drawCube(cubeBatch);
 }
 
 // Aufruf draw scene
 void RenderScene(void) {
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
 	modelViewMatrix.PushMatrix();
-	// has the depth of the recursion changed?
-	if (prevDepth != depth) {
-		// clear the batches
-		pyramidBatch.Reset();
-		pyramidBatch = GLBatch();
-		cubeBatch.Reset();
-		cubeBatch = GLBatch();
-		CreateGeometry();
-	}
+
 	modelViewMatrix.Translate(xTrans, yTrans, zTrans);
+
+	modelViewMatrix.Scale(globalScale, globalScale, globalScale);
 	glm::mat4 rot = glm::mat4_cast(rotation);
 	modelViewMatrix.MultMatrix(glm::value_ptr(rot));
 
-	// Konvertiere GLMatrixStack zu glm::mat4
-	//glm::mat4 mvMatrix = glm::make_mat4(modelViewMatrix.GetMatrix());
-
-	// Definiere und transformiere die Lichtpositionen mit GLM
-	//glm::vec4 lightPosition0 = glm::vec4(-75.0f, 150.0f, 100.0f, 1.0f);
-	//glm::vec4 lightPosition1 = glm::vec4(75.0f, 150.0f, 100.0f, 1.0f);
-
-	//lightPosition0 = mvMatrix * lightPosition0;
-	//lightPosition1 = mvMatrix * lightPosition1;
-
-	//glLightfv(GL_LIGHT0, GL_POSITION, &lightPosition0[0]);
-	//glLightfv(GL_LIGHT1, GL_POSITION, &lightPosition1[0]);
-
+	// has the depth of the recursion changed?
+	if (prevDepth != depth) {
+		// clear the batches
+		pyramidBatch.~GLBatch();
+		pyramidBatch = GLBatch();
+		cubeBatch.~GLBatch();
+		cubeBatch = GLBatch();
+		CreateGeometry();
+	}
 	//GLfloat vColor[] = { 0.0f, 1.0f, 1.0f, 1.0f };
 	//shaderManager.UseStockShader(GLT_SHADER_DEFAULT_LIGHT, transformPipeline.GetModelViewMatrix(), transformPipeline.GetProjectionMatrix(), vColor);
-	shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewProjectionMatrix());
-
-
 	// Draw the Sierpinski pyramid if bSierpinski is true
 	if (bSierpinski) {
+		shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewMatrix(), transformPipeline.GetProjectionMatrix());
 		pyramidBatch.Draw();
 	}
 	if (bMengerSponge) {
-		cubeBatch.Draw();
+		// die würfel müssen an den richtigen stellen gezeichnet werden
+		modelViewMatrix.PushMatrix();
+		// Skalierungsfaktor ist 1/3^tiefe
+		mengerScaleFactor = 1.0f / pow(3, depth);
+		// translation Faktor
+		modelViewMatrix.Scale(mengerScaleFactor, mengerScaleFactor, mengerScaleFactor);
+		drawMenger(depth);
+		modelViewMatrix.PopMatrix();
 	}
+		
 	// save the depth of the recursion
 	prevDepth = depth;
 
@@ -274,40 +287,11 @@ void SetupRC()
 	// Backface Culling aktivieren
 	glEnable(GL_CULL_FACE);
 	glEnable(GL_DEPTH_TEST);
-	glDisable(GL_LIGHTING);
 
 	//initialisiert die standard shader
 	shaderManager.InitializeStockShaders();
 	//Matrix stacks für die Transformationspipeline setzen, damit werden dann automatisch die Matrizen multipliziert
 	transformPipeline.SetMatrixStacks(modelViewMatrix,projectionMatrix);
-
-	// Setup von Licht
-	/*GLfloat ambientLight[] = {0.2f, 0.2f, 0.2f, 1.0f};
-	GLfloat diffuseLight[] = { 0.8f, 0.8f, 0.8f, 1.0f };
-	GLfloat specular[] = { 0.9f, 0.9f, 0.9f, 1.0f };
-	GLfloat lightPos[] = { -75.0f, 150.0f, 100.0f, 1.0f };
-
-	//glEnable(GL_LIGHTING);
-	glLightModelfv(GL_LIGHT_MODEL_AMBIENT, ambientLight);
-	glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuseLight);
-	glLightfv(GL_LIGHT0, GL_SPECULAR, specular);
-	glEnable(GL_LIGHT0);
-	// Zweites Licht hinzufügen
-	GLfloat lightPos2[] = { 75.0f, 150.0f, 100.0f, 1.0f };
-	GLfloat diffuseLight2[] = { 0.8f, 0.8f, 0.8f, 1.0f };
-
-	glEnable(GL_LIGHT1);
-	glLightfv(GL_LIGHT1, GL_DIFFUSE, diffuseLight2);
-
-	GLfloat matAmbient[] = { 0.7f, 0.7f, 0.7f, 1.0f };
-	GLfloat matDiffuse[] = { 0.8f, 0.8f, 0.8f, 1.0f };
-	GLfloat matSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-	GLfloat shininess = 40.0f;
-
-	glMaterialfv(GL_FRONT, GL_AMBIENT, matAmbient);
-	glMaterialfv(GL_FRONT, GL_DIFFUSE, matDiffuse);
-	glMaterialfv(GL_FRONT, GL_SPECULAR, matSpecular);
-	glMaterialf(GL_FRONT, GL_SHININESS, shininess);*/
 
 	//erzeuge die geometrie
 	CreateGeometry();
@@ -365,7 +349,7 @@ void SpecialKeys(int key, int x, int y)
 
 void ChangeSize(int w, int h)
 {
-	GLfloat nRange = 10.0f;
+	GLfloat nRange = 100.0f;
 
 	// Verhindere eine Division durch Null
 	if(h == 0)
