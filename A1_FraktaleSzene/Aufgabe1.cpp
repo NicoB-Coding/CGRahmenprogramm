@@ -40,6 +40,14 @@ GLBatch pyramidBatch;
 // create GLBatch for the menger sponge
 GLBatch cubeBatch;
 
+GLuint VAOcube;
+GLuint indexBufferCube;
+GLuint vBufferIdCube;
+
+GLuint VAOtetrahedron;
+GLuint indexBufferTetrahedron;
+GLuint vBufferIdTetrahedron;
+
 GLfloat cube_strip[14][3] = {
 	{-1.f, 1.f, 1.f},     // Front-top-left
 	{1.f, 1.f, 1.f},      // Front-top-right
@@ -56,6 +64,29 @@ GLfloat cube_strip[14][3] = {
 	{-1.f, 1.f, -1.f},    // Back-top-left
 	{1.f, 1.f, -1.f}      // Back-top-right
 };
+GLuint cubeIndices[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 };
+GLuint tetrahedronIndices[] = { 0, 2, 1, 0 , 3, 2, 1, 3, 0, 1, 2, 3};
+
+const float s_8_9 = sqrt(0.8f / 0.9f); // = 0.9428f
+const float s_2_9 = sqrt(0.2f / 0.9f); // = 0.4714f
+const float s_2_3 = sqrt(0.2f / 0.3f); // = 0.8165f
+
+float tetrahedron_coords[4][3] = {
+	{ 0.0f,   0.0f,   1.0f },
+	{ s_8_9,  0.0f,  -1.0f / 3.0f},
+	{-s_2_9,  s_2_3, -1.0f / 3.0f},
+	{-s_2_9, -s_2_3, -1.0f / 3.0f},
+};
+
+//Für interleaved vertex buffer objects ist es übersichtlicher eine einfache Struktur zu erzeugen.
+//Hier besitzt ein Vertex eine Position und ein Farbwert
+struct ColoredVertex
+{
+	glm::vec3 position;
+	glm::vec4 color;
+};
+
+int tetrahedron_indices[4][3] = { {0, 2, 1},  {0, 3, 2},  {1, 3, 0}, {1, 2, 3} };
 
 // Rotationsgroessen
 glm::quat rotation = glm::quat(0, 0, 0, 1);
@@ -64,91 +95,131 @@ glm::quat rotation = glm::quat(0, 0, 0, 1);
 bool bSierpinski = false;
 bool bMengerSponge = false;
 // depth of recursion for sierpinski and menger sponge
-int depth = 2;
+int depth = 0;
 int prevDepth = 0;
 GLfloat globalScale = 1.0f;
-int lameCounter = 0;
-
-
 bool bDepth = true;
 
 // length of the cube
 float currentLength = 2.0f;
-float mengerScaleFactor = 1.0f; 
+float mengerScaleFactor = 1.0f;
 
 // Kamera Translation
 static float xTrans = 0.0f;
 static float yTrans = 0.0f;
 static float zTrans = 0.0f;
 
-void m3dMidPoint(float result[3], const float a[3], const float b[3]) {
-	result[0] = (a[0] + b[0]) / 2.0f;
-	result[1] = (a[1] + b[1]) / 2.0f;
-	result[2] = (a[2] + b[2]) / 2.0f;
+void createTetrahedronWithVBOVBA() {
+	// Ein Array von 4 Vertices
+	ColoredVertex tetrahedronVertices[4];
+	for (int i = 0; i < 4; i++) {
+		tetrahedronVertices[i].position = glm::make_vec3(tetrahedron_coords[i]);
+		tetrahedronVertices[i].color = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+	}
+
+	// Index Buffer erzeugen
+	glGenBuffers(1, &indexBufferTetrahedron);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferTetrahedron);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * 12, tetrahedronIndices, GL_STATIC_DRAW);
+
+	// Vertex Buffer Object erzeugen
+	glGenBuffers(1, &vBufferIdTetrahedron);
+	glBindBuffer(GL_ARRAY_BUFFER, vBufferIdTetrahedron);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(ColoredVertex) * 4, tetrahedronVertices, GL_STATIC_DRAW);
+
+	// Vertex Array Object erzeugen
+	glGenVertexArrays(1, &VAOtetrahedron);
+	glBindVertexArray(VAOtetrahedron);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(ColoredVertex), NULL);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(ColoredVertex), (const GLvoid*)(sizeof(glm::vec3)));
+	glBindVertexArray(0);
 }
 
-// this function divides a triangle into four subtriangles recursively until depth is 0
-void divideTriangle(GLBatch& batch, GLfloat v0[], GLfloat v1[], GLfloat v2[], GLfloat v3[], int depth) {
-    if (depth == 0) {
-		// red color
-		batch.Color4f(1.0f, 0.0f, 0.0f, 1.0f);
-        batch.Vertex3fv(v0);
-		batch.Color4f(1.0f, 0.0f, 0.0f, 1.0f);
-        batch.Vertex3fv(v2);
-		batch.Color4f(1.0f, 0.0f, 0.0f, 1.0f);
-        batch.Vertex3fv(v1);
-		 // magenta color
-		batch.Color4f(1.0f, 0.0f, 1.0f, 1.0f);
-        batch.Vertex3fv(v0);
-		batch.Color4f(1.0f, 0.0f, 1.0f, 1.0f);
-        batch.Vertex3fv(v1);
-		batch.Color4f(1.0f, 0.0f, 1.0f, 1.0f);
-        batch.Vertex3fv(v3);
-		// blue color
-		batch.Color4f(0.0f, 0.0f, 1.0f, 1.0f);
-        batch.Vertex3fv(v0);
-		batch.Color4f(0.0f, 0.0f, 1.0f, 1.0f);
-        batch.Vertex3fv(v3);
-		batch.Color4f(0.0f, 0.0f, 1.0f, 1.0f);
-        batch.Vertex3fv(v2);
-		// green color
-		batch.Color4f(0.0f, 1.0f, 0.0f, 1.0f);
-        batch.Vertex3fv(v1);
-		batch.Color4f(0.0f, 1.0f, 0.0f, 1.0f);
-        batch.Vertex3fv(v2);
-		batch.Color4f(0.0f, 1.0f, 0.0f, 1.0f);
-        batch.Vertex3fv(v3);
-    }
-    else {
-        GLfloat v01[3], v12[3], v20[3], v03[3], v13[3], v23[3];
-        m3dMidPoint(v01, v0, v1);
-        m3dMidPoint(v12, v1, v2);
-        m3dMidPoint(v20, v2, v0);
-        m3dMidPoint(v03, v0, v3);
-        m3dMidPoint(v13, v1, v3);
-        m3dMidPoint(v23, v2, v3);
-        divideTriangle(batch, v0, v01, v20, v03, depth - 1);
-        divideTriangle(batch, v01, v1, v12, v13, depth - 1);
-        divideTriangle(batch, v20, v12, v2, v23, depth - 1);
-        divideTriangle(batch, v03, v13, v23, v3, depth - 1);
-    }
+void createTetrahedronWithVertexArrays(GLBatch& batch) {
+	// difference here, we use CopyVertexData3f instead of Vertex3f(v)
+	batch.Begin(GL_TRIANGLES, 12);
+	glm::vec3 tetrahedronVertices[12];
+	glm::vec4 tetrahedronColors[12];
+	for (int i = 0; i < 3; i++) {
+		tetrahedronVertices[i] = glm::make_vec3(tetrahedron_coords[tetrahedron_indices[0][i]]);
+		tetrahedronColors[i] = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+	}
+	// blue
+	for (int i = 0; i < 3; i++) {
+		tetrahedronVertices[i + 3] = glm::make_vec3(tetrahedron_coords[tetrahedron_indices[1][i]]);
+		tetrahedronColors[i + 3] = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
+	}
+	// green
+	for (int i = 0; i < 3; i++) {
+		tetrahedronVertices[i + 6] = glm::make_vec3(tetrahedron_coords[tetrahedron_indices[2][i]]);
+		tetrahedronColors[i + 6] = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
+	}
+	// yellow
+	for (int i = 0; i < 3; i++) {
+		tetrahedronVertices[i + 9] = glm::make_vec3(tetrahedron_coords[tetrahedron_indices[3][i]]);
+		tetrahedronColors[i + 9] = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
+	}
+	batch.CopyVertexData3f(glm::value_ptr(tetrahedronVertices[0]));
+	batch.CopyColorData4f(glm::value_ptr(tetrahedronColors[0]));
+	batch.End();
 }
 
-void DrawSierpinski() {
-	int numVertices = 4 * (int)pow(4, depth+1);  // Berechnung der Anzahl der Vertices
-	pyramidBatch.Begin(GL_TRIANGLES, numVertices);
-
-	GLfloat sierPinski[4][3] = {
-		{-1.0f, -1.0f, -1.0f}, // v0 links
-		{1.0f, -1.0f, -1.0f}, // Vorne rechts
-		{0.0f, 1.0f, -1.0f}, // hinten
-		{0.0f, 0.0f, 1.0f} // oben
-	};
-	divideTriangle(pyramidBatch, sierPinski[0], sierPinski[1], sierPinski[2], sierPinski[3], depth);
-	pyramidBatch.End();
+void createCubeWithVertexArrays(GLBatch& batch) {
+	batch.Begin(GL_TRIANGLE_STRIP, 14);
+	glm::vec3 cubeVertices[14];
+	glm::vec4 cubeColors[14];
+	// each side of the cube is drawn with a different color
+	// red
+	for (int i = 0; i < 14; i++) {
+		// färbe den Vertex mit rot, grün oder blau ein
+		if (i < 4) {
+			cubeColors[i] = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+		}
+		else if (i < 8) {
+			cubeColors[i] = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
+		}
+		else if (i < 12) {
+			cubeColors[i] = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
+		}
+		else {
+			cubeColors[i] = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
+		}
+		//berechne die normale
+		cubeVertices[i] = glm::make_vec3(cube_strip[i]);
+	}
+	batch.CopyVertexData3f(glm::value_ptr(cubeVertices[0]));
+	batch.CopyColorData4f(glm::value_ptr(cubeColors[0]));
+	batch.End();
 }
 
-void drawCube(GLBatch& batch) {
+void createTetrahedron(GLBatch& batch) {
+	batch.Begin(GL_TRIANGLES, 12);
+	// red color
+	for (int i = 0; i < 3; i++) {
+		batch.Color4f(1.0f, 0.0f, 0.0f, 1.0f);
+		batch.Vertex3fv(tetrahedron_coords[tetrahedron_indices[0][i]]);
+	}
+	// blue
+	for (int i = 0; i < 3; i++) {
+		batch.Color4f(0.0f, 0.0f, 1.0f, 1.0f);
+		batch.Vertex3fv(tetrahedron_coords[tetrahedron_indices[1][i]]);
+	}
+	// green
+	for (int i = 0; i < 3; i++) {
+		batch.Color4f(0.0f, 1.0f, 0.0f, 1.0f);
+		batch.Vertex3fv(tetrahedron_coords[tetrahedron_indices[2][i]]);
+	}
+	// yellow
+	for (int i = 0; i < 3; i++) {
+		batch.Color4f(1.0f, 1.0f, 0.0f, 1.0f);
+		batch.Vertex3fv(tetrahedron_coords[tetrahedron_indices[3][i]]);
+	}
+	batch.End();
+}
+
+void createCube(GLBatch& batch) {
 	batch.Begin(GL_TRIANGLE_STRIP, 14);
 	// each side of the cube is drawn with a different color
 	// red
@@ -167,11 +238,29 @@ void drawCube(GLBatch& batch) {
 		else {
 			batch.Color4f(1.0f, 1.0f, 0.0f, 1.0f);
 		}
-		//berechne die normale
-		batch.Normal3fv(cube_strip[i]);
 		batch.Vertex3fv(cube_strip[i]);
 	}
 	batch.End();
+}
+void drawSierpinski(int sierpinskiDepth) {
+	if (sierpinskiDepth == 0) {
+		// Grundfall: Zeichne ein einzelnes Tetraeder
+		shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewMatrix(), transformPipeline.GetProjectionMatrix());
+		pyramidBatch.Draw();
+	}
+	else {
+		// Rekursiver Fall: Erzeuge 4 kleinere Tetraeder
+		for (int i = 0; i < 4; i++) {
+			modelViewMatrix.PushMatrix();
+			// Skalierungsfaktor ist 1/2^tiefe
+			// Translation Faktor
+			float scale = 1 * pow(2, sierpinskiDepth-1);
+			modelViewMatrix.Translate(tetrahedron_coords[i][0]*scale, tetrahedron_coords[i][1] * scale, tetrahedron_coords[i][2] * scale);
+			// Rekursiver Aufruf für jedes Tetraeder
+			drawSierpinski(sierpinskiDepth - 1);
+			modelViewMatrix.PopMatrix();
+		}
+	}
 }
 
 void drawMenger(int mengerDepth) {
@@ -193,7 +282,7 @@ void drawMenger(int mengerDepth) {
 						continue;
 					}
 					modelViewMatrix.PushMatrix();
-					float scale = currentLength * pow(3, mengerDepth-1);
+					float scale = 1.633f * pow(3, mengerDepth-1);
 					modelViewMatrix.Translate(j*scale, k*scale, l*scale);
 					// Rekursiver Aufruf für jeden Würfel
 					drawMenger(mengerDepth - 1);
@@ -203,7 +292,6 @@ void drawMenger(int mengerDepth) {
 		}
 	}
 }
-
 
 //GUI
 TwBar *bar;
@@ -225,8 +313,8 @@ void InitGUI()
 
 void CreateGeometry()
 {
-	DrawSierpinski();
-	drawCube(cubeBatch);
+	createTetrahedronWithVBOVBA();
+	createCubeWithVertexArrays(cubeBatch);
 }
 
 // Aufruf draw scene
@@ -250,19 +338,25 @@ void RenderScene(void) {
 		cubeBatch = GLBatch();
 		CreateGeometry();
 	}
-	//GLfloat vColor[] = { 0.0f, 1.0f, 1.0f, 1.0f };
-	//shaderManager.UseStockShader(GLT_SHADER_DEFAULT_LIGHT, transformPipeline.GetModelViewMatrix(), transformPipeline.GetProjectionMatrix(), vColor);
 	// Draw the Sierpinski pyramid if bSierpinski is true
 	if (bSierpinski) {
-		shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewMatrix(), transformPipeline.GetProjectionMatrix());
-		pyramidBatch.Draw();
+		/*modelViewMatrix.PushMatrix();
+		float sierpinskiScaleFactor = 1 / pow(2, depth);
+		modelViewMatrix.Scale(sierpinskiScaleFactor, sierpinskiScaleFactor, sierpinskiScaleFactor);
+		drawSierpinski(depth);
+		modelViewMatrix.PopMatrix();*/
+		shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewProjectionMatrix());
+		glBindVertexArray(VAOtetrahedron);
+		glBindBuffer(GL_ARRAY_BUFFER, vBufferIdTetrahedron);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferTetrahedron);
+		glDrawElements(GL_TRIANGLES, 12*3, GL_UNSIGNED_INT, 0);
+		glBindVertexArray(0);
+		gltCheckErrors();
 	}
 	if (bMengerSponge) {
 		// die würfel müssen an den richtigen stellen gezeichnet werden
 		modelViewMatrix.PushMatrix();
-		// Skalierungsfaktor ist 1/3^tiefe
 		mengerScaleFactor = 1.0f / pow(3, depth);
-		// translation Faktor
 		modelViewMatrix.Scale(mengerScaleFactor, mengerScaleFactor, mengerScaleFactor);
 		drawMenger(depth);
 		modelViewMatrix.PopMatrix();
@@ -281,8 +375,8 @@ void RenderScene(void) {
 // Initialisierung des Rendering Kontextes
 void SetupRC()
 {
-	// Schwarzer Hintergrund
-	glClearColor(0.2f, 0.2f, 1.0f, 1.0f);
+	// hellorange
+	glClearColor(0.8f, 0.5f, 0.0f, 1.0f);
 	//glFrontFace(GL_CW);
 	// Backface Culling aktivieren
 	glEnable(GL_CULL_FACE);
