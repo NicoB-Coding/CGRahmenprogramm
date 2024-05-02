@@ -1,6 +1,10 @@
 SET(PROJECT_NAME A1_FraktaleSzene)
 
-set(SOURCES Aufgabe1.cpp)
+# Aufgabe1.cpp und Aufgabe1.h hinzufügen
+SET(SOURCES
+	Aufgabe1.cpp
+	Aufgabe1.h
+)
 set(LIBRARIES GLTools freeglut AntTweakBar)
 
 project(${PROJECT_NAME})

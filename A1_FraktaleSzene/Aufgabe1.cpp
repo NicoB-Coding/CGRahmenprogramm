@@ -30,6 +30,7 @@ d.h. für OpenGL mit Hilfe der GLBatch-Klasse aus der GLTools-Library und den Met
 #include <GL/freeglut.h>
 #include <AntTweakBar.h>
 #include <vector>
+#include "Aufgabe1.h"
 
 GLShaderManager shaderManager;
 GLMatrixStack modelViewMatrix;
@@ -44,53 +45,13 @@ GLuint VAOcube;
 GLuint indexBufferCube;
 GLuint vBufferIdCube;
 
-GLuint VAOtetrahedron;
-GLuint indexBufferTetrahedron;
-GLuint vBufferIdTetrahedron;
+GLuint VAOtetra;
+GLuint indexBufferTetra;
+GLuint vBufferIdTetra;
 
-GLfloat cube_strip[14][3] = {
-	{-1.f, 1.f, 1.f},     // Front-top-left
-	{1.f, 1.f, 1.f},      // Front-top-right
-	{-1.f, -1.f, 1.f},    // Front-bottom-left
-	{1.f, -1.f, 1.f},     // Front-bottom-right
-	{1.f, -1.f, -1.f },    // Back-bottom-right
-	{1.f, 1.f, 1.f},      // Front-top-right
-	{1.f, 1.f, -1.f},     // Back-top-right
-	{-1.f, 1.f, 1.f},     // Front-top-left
-	{-1.f, 1.f, -1.f},    // Back-top-left
-	{-1.f, -1.f, 1.f},    // Front-bottom-left
-	{-1.f, -1.f, -1.f},   // Back-bottom-left
-	{1.f, -1.f, -1.f},    // Back-bottom-right
-	{-1.f, 1.f, -1.f},    // Back-top-left
-	{1.f, 1.f, -1.f}      // Back-top-right
-};
-GLuint cubeIndices[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 };
-GLuint tetrahedronIndices[] = { 0, 2, 1, 0 , 3, 2, 1, 3, 0, 1, 2, 3};
 
-const float s_8_9 = sqrt(0.8f / 0.9f); // = 0.9428f
-const float s_2_9 = sqrt(0.2f / 0.9f); // = 0.4714f
-const float s_2_3 = sqrt(0.2f / 0.3f); // = 0.8165f
 
-float tetrahedron_coords[4][3] = {
-	{ 0.0f,   0.0f,   1.0f },
-	{ s_8_9,  0.0f,  -1.0f / 3.0f},
-	{-s_2_9,  s_2_3, -1.0f / 3.0f},
-	{-s_2_9, -s_2_3, -1.0f / 3.0f},
-};
-glm::vec3 tetravec3[4] = {
-	glm::vec3( 0.0f,   0.0f,   1.0f),
-	glm::vec3( s_8_9,  0.0f,  -1.0f / 3.0f),
-	glm::vec3( - s_2_9,  s_2_3, -1.0f / 3.0f),
-	glm::vec3( - s_2_9, -s_2_3, -1.0f / 3.0f),
-};
-//Für interleaved vertex buffer objects ist es übersichtlicher eine einfache Struktur zu erzeugen.
-//Hier besitzt ein Vertex eine Position und ein Farbwert
-struct ColoredVertex
-{
-	glm::vec3 position;
-	glm::vec4 color;
-};
-int tetrahedron_indices[4][3] = { {0, 2, 1},  {0, 3, 2},  {1, 3, 0}, {1, 2, 3} };
+
 
 // Rotationsgroessen
 glm::quat rotation = glm::quat(0, 0, 0, 1);
@@ -103,6 +64,7 @@ int depth = 0;
 int prevDepth = 0;
 GLfloat globalScale = 0.7f;
 bool bDepth = true;
+bool bPerspective = true;
 
 // length of the cube
 float currentLength = 2.0f;
@@ -113,154 +75,14 @@ static float xTrans = 0.0f;
 static float yTrans = 0.0f;
 static float zTrans = 0.0f;
 
-void createTetrahedronWithVBOVBA() {
-	// Ein Array von 4 Vertices
-	ColoredVertex tetrahedronVertices[4];
-	for (int i = 0; i < 4; i++) {
-		tetrahedronVertices[i].position = tetravec3[i];
-		// i = 1->red, i = 2 -> blue, i = 3 -> green, i = 4 -> yellow
-		switch (i) {
-			case 0:
-			tetrahedronVertices[i].color = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-			break;
-			case 1:
-			tetrahedronVertices[i].color = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
-			break;
-			case 2:
-			tetrahedronVertices[i].color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
-			break;
-			case 3:
-			tetrahedronVertices[i].color = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
-			break;
-		}
-	}
-	// Vertex Array Object erzeugen
-	glGenVertexArrays(1, &VAOtetrahedron);
-	glBindVertexArray(VAOtetrahedron);
-	// Index Buffer erzeugen
-	glGenBuffers(1, &indexBufferTetrahedron);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferTetrahedron);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * 12, tetrahedronIndices, GL_STATIC_DRAW);
-
-	// Vertex Buffer Object erzeugen
-	glGenBuffers(1, &vBufferIdTetrahedron);
-	glBindBuffer(GL_ARRAY_BUFFER, vBufferIdTetrahedron);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(ColoredVertex) * 4 , tetrahedronVertices, GL_STATIC_DRAW);
-
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(ColoredVertex), NULL);
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(ColoredVertex), (const GLvoid*)(sizeof(glm::vec3)));
-	glBindVertexArray(0);
-}
-
-void createTetrahedronWithVertexArrays(GLBatch& batch) {
-	// difference here, we use CopyVertexData3f instead of Vertex3f(v)
-	batch.Begin(GL_TRIANGLES, 12);
-	glm::vec3 tetrahedronVertices[12];
-	glm::vec4 tetrahedronColors[12];
-	for (int i = 0; i < 3; i++) {
-		tetrahedronVertices[i] = glm::make_vec3(tetrahedron_coords[tetrahedron_indices[0][i]]);
-		tetrahedronColors[i] = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-	}
-	// blue
-	for (int i = 0; i < 3; i++) {
-		tetrahedronVertices[i + 3] = glm::make_vec3(tetrahedron_coords[tetrahedron_indices[1][i]]);
-		tetrahedronColors[i + 3] = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
-	}
-	// green
-	for (int i = 0; i < 3; i++) {
-		tetrahedronVertices[i + 6] = glm::make_vec3(tetrahedron_coords[tetrahedron_indices[2][i]]);
-		tetrahedronColors[i + 6] = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
-	}
-	// yellow
-	for (int i = 0; i < 3; i++) {
-		tetrahedronVertices[i + 9] = glm::make_vec3(tetrahedron_coords[tetrahedron_indices[3][i]]);
-		tetrahedronColors[i + 9] = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
-	}
-	batch.CopyVertexData3f(glm::value_ptr(tetrahedronVertices[0]));
-	batch.CopyColorData4f(glm::value_ptr(tetrahedronColors[0]));
-	batch.End();
-}
-
-void createCubeWithVertexArrays(GLBatch& batch) {
-	batch.Begin(GL_TRIANGLE_STRIP, 14);
-	glm::vec3 cubeVertices[14];
-	glm::vec4 cubeColors[14];
-	// each side of the cube is drawn with a different color
-	// red
-	for (int i = 0; i < 14; i++) {
-		// färbe den Vertex mit rot, grün oder blau ein
-		if (i < 4) {
-			cubeColors[i] = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-		}
-		else if (i < 8) {
-			cubeColors[i] = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
-		}
-		else if (i < 12) {
-			cubeColors[i] = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
-		}
-		else {
-			cubeColors[i] = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
-		}
-		//berechne die normale
-		cubeVertices[i] = glm::make_vec3(cube_strip[i]);
-	}
-	batch.CopyVertexData3f(glm::value_ptr(cubeVertices[0]));
-	batch.CopyColorData4f(glm::value_ptr(cubeColors[0]));
-	batch.End();
-}
-
-void createTetrahedron(GLBatch& batch) {
-	batch.Begin(GL_TRIANGLES, 12);
-	// red color
-	for (int i = 0; i < 3; i++) {
-		batch.Color4f(1.0f, 0.0f, 0.0f, 1.0f);
-		batch.Vertex3fv(tetrahedron_coords[tetrahedron_indices[0][i]]);
-	}
-	// blue
-	for (int i = 0; i < 3; i++) {
-		batch.Color4f(0.0f, 0.0f, 1.0f, 1.0f);
-		batch.Vertex3fv(tetrahedron_coords[tetrahedron_indices[1][i]]);
-	}
-	// green
-	for (int i = 0; i < 3; i++) {
-		batch.Color4f(0.0f, 1.0f, 0.0f, 1.0f);
-		batch.Vertex3fv(tetrahedron_coords[tetrahedron_indices[2][i]]);
-	}
-	// yellow
-	for (int i = 0; i < 3; i++) {
-		batch.Color4f(1.0f, 1.0f, 0.0f, 1.0f);
-		batch.Vertex3fv(tetrahedron_coords[tetrahedron_indices[3][i]]);
-	}
-	batch.End();
-}
-
-void createCube(GLBatch& batch) {
-	batch.Begin(GL_TRIANGLE_STRIP, 14);
-	// each side of the cube is drawn with a different color
-	// red
-
-	for (int i = 0; i < 14; i++) {
-		// färbe den Vertex mit rot, grün oder blau ein
-		if (i < 4) {
-			batch.Color4f(1.0f, 0.0f, 0.0f, 1.0f);
-		}
-		else {
-			batch.Color4f(1.0f, 1.0f, 0.0f, 1.0f);
-		}
-		batch.Vertex3fv(cube_strip[i]);
-	}
-	batch.End();
-}
 void drawSierpinski(int sierpinskiDepth) {
 	if (sierpinskiDepth == 0) {
 		// Grundfall: Zeichne ein einzelnes Tetraeder
-		shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewMatrix(), transformPipeline.GetProjectionMatrix());
+		shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewProjectionMatrix());
 		//pyramidBatch.Draw();
-		glBindVertexArray(VAOtetrahedron);
-		glBindBuffer(GL_ARRAY_BUFFER, vBufferIdTetrahedron);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferTetrahedron);
+		glBindVertexArray(VAOtetra);
+		glBindBuffer(GL_ARRAY_BUFFER, vBufferIdTetra);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferTetra);
 		glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
 		glBindVertexArray(0);
 	}
@@ -282,7 +104,7 @@ void drawSierpinski(int sierpinskiDepth) {
 void drawMenger(int mengerDepth) {
 	if (mengerDepth == 0) {
 		// Grundfall: Zeichne einen einzelnen Würfel
-		shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewMatrix(), transformPipeline.GetProjectionMatrix());
+		shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewProjectionMatrix());
 		cubeBatch.Draw();
 	}
 	else {
@@ -306,6 +128,40 @@ void drawMenger(int mengerDepth) {
 	}
 }
 
+void ChangeSize(int w, int h)
+{
+	GLfloat nRange = 7.0f;
+
+	// Verhindere eine Division durch Null
+	if (h == 0)
+		h = 1;
+	// Setze den Viewport gemaess der Window-Groesse
+	glViewport(0, 0, w, h);
+	// Ruecksetzung des Projection matrix stack
+	projectionMatrix.LoadIdentity();
+
+
+	// orthogonale oder perspektivische Projektion?
+	if (bPerspective) {
+		// Definiere das viewing volume (left, right, bottom, top, near, far)
+		viewFrustum.SetPerspective(100.0f, float(w) / float(h) / 4, 1.0f, 100.0f);
+	}
+	else {
+		// Definiere das viewing volume (left, right, bottom, top, near, far)
+		if (w <= h)
+			viewFrustum.SetOrthographic(-nRange, nRange, -nRange * h / w, nRange * h / w, -nRange, nRange);
+		else
+			viewFrustum.SetOrthographic(-nRange * w / h, nRange * w / h, -nRange, nRange, -nRange, nRange);
+	}
+	projectionMatrix.LoadMatrix(viewFrustum.GetProjectionMatrix());
+	// Ruecksetzung des Model view matrix stack
+	modelViewMatrix.LoadIdentity();
+
+	transformPipeline.SetMatrixStacks(modelViewMatrix, projectionMatrix);
+
+	TwWindowSize(w, h);
+}
+
 //GUI
 TwBar *bar;
 void InitGUI()
@@ -322,11 +178,13 @@ void InitGUI()
 	TwAddVarRW(bar, "Depth", TW_TYPE_INT32, &depth, " label='Depth' min=0 max=10 ");
 	// add sensitive slider for the scaling of the geometry
 	TwAddVarRW(bar, "Scale", TW_TYPE_FLOAT, &globalScale, " label='Scale' min=0.1 max=10 step=0.1 ");
+	// add button to change the perspective
+	TwAddVarRW(bar, "Perspective", TW_TYPE_BOOLCPP, &bPerspective, " label='Perspective?' ");
 }
 
 void CreateGeometry()
 {
-	createTetrahedronWithVBOVBA();
+	createTetrahedronWithVBOVBA(VAOtetra, indexBufferTetra, vBufferIdTetra);
 	createCubeWithVertexArrays(cubeBatch);
 }
 
@@ -337,7 +195,7 @@ void RenderScene(void) {
 	modelViewMatrix.PushMatrix();
 
 	modelViewMatrix.Translate(xTrans, yTrans, zTrans);
-
+	modelViewMatrix.Translate(0.0f, 0.0f, -2.0f);
 	modelViewMatrix.Scale(globalScale, globalScale, globalScale);
 	glm::mat4 rot = glm::mat4_cast(glm::quat(rotation.z, rotation.w, rotation.x, rotation.y));
 	modelViewMatrix.MultMatrix(glm::value_ptr(rot));
@@ -370,7 +228,7 @@ void RenderScene(void) {
 		
 	// save the depth of the recursion
 	prevDepth = depth;
-
+	
 	modelViewMatrix.PopMatrix();
 	gltCheckErrors();
 	TwDraw();
@@ -447,29 +305,7 @@ void SpecialKeys(int key, int x, int y)
 	glutPostRedisplay();
 }
 
-void ChangeSize(int w, int h)
-{
-	GLfloat nRange = 7.0f;
 
-	// Verhindere eine Division durch Null
-	if(h == 0)
-		h = 1;
-	// Setze den Viewport gemaess der Window-Groesse
-	glViewport(0, 0, w, h);
-	// Ruecksetzung des Projection matrix stack
-	projectionMatrix.LoadIdentity();
-	
-	// Definiere das viewing volume (left, right, bottom, top, near, far)
-	if (w <= h) 
-		viewFrustum.SetOrthographic(-nRange, nRange, -nRange*h/w, nRange*h/w, -nRange, nRange);
-	else 
-		viewFrustum.SetOrthographic(-nRange*w/h, nRange*w/h, -nRange, nRange, -nRange, nRange);
-	projectionMatrix.LoadMatrix(viewFrustum.GetProjectionMatrix());
-	// Ruecksetzung des Model view matrix stack
-	modelViewMatrix.LoadIdentity();
-	
-	TwWindowSize(w, h);
-}
 
 void ShutDownRC()
 {
