@@ -31,60 +31,68 @@ d.h. für OpenGL mit Hilfe der GLBatch-Klasse aus der GLTools-Library und den Met
 #include <AntTweakBar.h>
 #include <vector>
 #include "Aufgabe1.h"
+#define GL_PI 3.1415f
+#include <GL/glut.h>
+#include <Utils/Timer.h>
 
+// matrix and shader stuff
 GLShaderManager shaderManager;
 GLMatrixStack modelViewMatrix;
 GLMatrixStack projectionMatrix;
 GLGeometryTransform transformPipeline;
 GLFrustum viewFrustum;
+TwBar* bar; // GUI bar
+GLFrame cameraFrame; // camera frame
+
+
+// batches for the geometry
 GLBatch pyramidBatch;
-// create GLBatch for the menger sponge
 GLBatch cubeBatch;
 
+// cube buffer objects
 GLuint VAOcube;
 GLuint indexBufferCube;
 GLuint vBufferIdCube;
-
+// tetra buffer objects
 GLuint VAOtetra;
 GLuint indexBufferTetra;
 GLuint vBufferIdTetra;
 
-
-
-
-
-// Rotationsgroessen
+// rotation
 glm::quat rotation = glm::quat(0, 0, 0, 1);
+glm::quat animation = glm::quat(0, 0, 0, 1);
+float currentAnimationAngle = 0.0f;
+
+
+int depth = 0; // recursion depth
+int prevDepth = 0;
+
+GLfloat globalScale = 2.7f;
+float currentLength = 2.0f; // cube length
+float mengerScaleFactor = 1.0f;
+
+// Camera Translation
+static float xTrans = 0.0f;
+static float yTrans = 0.0f;
+static float zTrans = 0.0f;
 
 // bool for levers
 bool bSierpinski = false;
 bool bMengerSponge = false;
-// depth of recursion for sierpinski and menger sponge
-int depth = 0;
-int prevDepth = 0;
-GLfloat globalScale = 0.7f;
 bool bDepth = true;
-bool bPerspective = true;
-
-// length of the cube
-float currentLength = 2.0f;
-float mengerScaleFactor = 1.0f;
-
-// Kamera Translation
-static float xTrans = 0.0f;
-static float yTrans = 0.0f;
-static float zTrans = 0.0f;
+bool bPerspective = false;
+bool bUFO = false;
 
 void drawSierpinski(int sierpinskiDepth) {
 	if (sierpinskiDepth == 0) {
 		// Grundfall: Zeichne ein einzelnes Tetraeder
 		shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewProjectionMatrix());
-		//pyramidBatch.Draw();
-		glBindVertexArray(VAOtetra);
-		glBindBuffer(GL_ARRAY_BUFFER, vBufferIdTetra);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferTetra);
-		glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
-		glBindVertexArray(0);
+		pyramidBatch.Draw();
+		//glBindVertexArray(VAOtetra);
+		//glBindBuffer(GL_ARRAY_BUFFER, vBufferIdTetra);
+		//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferTetra);
+		//glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
+		//glBindVertexArray(0);
 	}
 	else {
 		// Rekursiver Fall: Erzeuge 4 kleinere Tetraeder
@@ -116,7 +124,7 @@ void drawMenger(int mengerDepth) {
 					if ((j == 0 && k == 0) || (j == 0 && l == 0) || (k == 0 && l == 0)) {
 						continue;
 					}
-					modelViewMatrix.PushMatrix();
+					modelViewMatrix.PushMatrix();					
 					float scale = 1.64f * pow(3, mengerDepth-1);
 					modelViewMatrix.Translate(j*scale, k*scale, l*scale);
 					// Rekursiver Aufruf für jeden Würfel
@@ -130,7 +138,7 @@ void drawMenger(int mengerDepth) {
 
 void ChangeSize(int w, int h)
 {
-	GLfloat nRange = 7.0f;
+	GLfloat nRange = 15.0f;
 
 	// Verhindere eine Division durch Null
 	if (h == 0)
@@ -144,7 +152,7 @@ void ChangeSize(int w, int h)
 	// orthogonale oder perspektivische Projektion?
 	if (bPerspective) {
 		// Definiere das viewing volume (left, right, bottom, top, near, far)
-		viewFrustum.SetPerspective(100.0f, float(w) / float(h) / 4, 1.0f, 100.0f);
+		viewFrustum.SetPerspective(50.0f, float(w) / float(h), 1.0f, 100.0f);
 	}
 	else {
 		// Definiere das viewing volume (left, right, bottom, top, near, far)
@@ -162,14 +170,11 @@ void ChangeSize(int w, int h)
 	TwWindowSize(w, h);
 }
 
-//GUI
-TwBar *bar;
 void InitGUI()
 {
 	bar = TwNewBar("TweakBar");
 	TwDefine(" TweakBar size='200 400'");
 	TwAddVarRW(bar,"Model Rotation",TW_TYPE_QUAT4F, &rotation, "");
-	//Hier weitere GUI Variablen anlegen. Für Farbe z.B. den Typ TW_TYPE_COLOR4F benutzen
 	// Add button to check if siepinski is drawn
 	TwAddVarRW(bar, "Draw Sierpinski", TW_TYPE_BOOLCPP, &bSierpinski, " label='Draw Sierpinski' ");
 	// Add button to check if menge sponge is drawn
@@ -180,26 +185,41 @@ void InitGUI()
 	TwAddVarRW(bar, "Scale", TW_TYPE_FLOAT, &globalScale, " label='Scale' min=0.1 max=10 step=0.1 ");
 	// add button to change the perspective
 	TwAddVarRW(bar, "Perspective", TW_TYPE_BOOLCPP, &bPerspective, " label='Perspective?' ");
+	// add button for UfO mode
+	TwAddVarRW(bar, "UFO", TW_TYPE_BOOLCPP, &bUFO, " label='Animation in UFO Mode?' ");
 }
 
 void CreateGeometry()
 {
-	createTetrahedronWithVBOVBA(VAOtetra, indexBufferTetra, vBufferIdTetra);
-	createCubeWithVertexArrays(cubeBatch);
+	createTetrahedron(pyramidBatch);
+	//createTetrahedronWithVBOVBA(VAOtetra, indexBufferTetra, vBufferIdTetra);
+	createCube(cubeBatch);
 }
 
 // Aufruf draw scene
 void RenderScene(void) {
-
+	cameraFrame.SetOrigin(0.0f, 0.0f, 0.0f);
+	cameraFrame.SetForwardVector(0.0f, 0.0f, 1.0f);
+	cameraFrame.SetUpVector(0.0f, 1.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	modelViewMatrix.PushMatrix();
+	modelViewMatrix.PushMatrix(cameraFrame);
+	modelViewMatrix.LoadIdentity();
 
-	modelViewMatrix.Translate(xTrans, yTrans, zTrans);
-	modelViewMatrix.Translate(0.0f, 0.0f, -2.0f);
 	modelViewMatrix.Scale(globalScale, globalScale, globalScale);
-	glm::mat4 rot = glm::mat4_cast(glm::quat(rotation.z, rotation.w, rotation.x, rotation.y));
-	modelViewMatrix.MultMatrix(glm::value_ptr(rot));
-
+	if (bUFO) {
+		//cameraFrame.MoveForward(rotation.y);
+		//cameraFrame.MoveUp(rotation.x);
+		//cameraFrame.MoveRight(rotation.w);
+		
+		// rotate the camera frame
+		M3DMatrix44f M;
+		cameraFrame.GetMatrix(M);
+		modelViewMatrix.MultMatrix(M);
+	}
+	else {
+		glm::mat4 rot = glm::mat4_cast(glm::quat(rotation.z, rotation.w, rotation.x, rotation.y));
+		modelViewMatrix.MultMatrix(glm::value_ptr(rot));
+	}
 	// has the depth of the recursion changed?
 	if (prevDepth != depth) {
 		// clear the batches
@@ -211,7 +231,13 @@ void RenderScene(void) {
 	}
 	// Draw the Sierpinski pyramid if bSierpinski is true
 	if (bSierpinski) {
-		modelViewMatrix.PushMatrix();
+		modelViewMatrix.PushMatrix();		
+		// rotate with a very small angle
+		modelViewMatrix.Rotate(100*currentAnimationAngle, 0.0f, 1.0f, 0.0f);
+		// ModelViewMatrix in einer Kreisbahn bewegen
+		modelViewMatrix.Translate(2*sin(currentAnimationAngle), 0.0f, 2*cos(currentAnimationAngle));
+		currentAnimationAngle += 0.0002f;
+
 		float sierpinskiScaleFactor = 1 / pow(2, depth);
 		modelViewMatrix.Scale(sierpinskiScaleFactor, sierpinskiScaleFactor, sierpinskiScaleFactor);
 		drawSierpinski(depth);
@@ -222,13 +248,15 @@ void RenderScene(void) {
 		modelViewMatrix.PushMatrix();
 		mengerScaleFactor = 1.0f / pow(3, depth);
 		modelViewMatrix.Scale(mengerScaleFactor, mengerScaleFactor, mengerScaleFactor);
+		// size animation
+		modelViewMatrix.Scale(0.25*sin(currentAnimationAngle)+0.5, 0.25*sin(currentAnimationAngle)+0.5, 0.25*sin(currentAnimationAngle)+0.5);
+		currentAnimationAngle += 0.0002f;
 		drawMenger(depth);
 		modelViewMatrix.PopMatrix();
 	}
-		
+
 	// save the depth of the recursion
 	prevDepth = depth;
-	
 	modelViewMatrix.PopMatrix();
 	gltCheckErrors();
 	TwDraw();
@@ -239,11 +267,11 @@ void RenderScene(void) {
 // Initialisierung des Rendering Kontextes
 void SetupRC()
 {
-	// hellorange
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	//glFrontFace(GL_CW);
+	glFrontFace(GL_CW); // Winding Order könnte noch umgedreht werden, dafür müsste ich aber alle Indices umdrehen...
 	// Backface Culling aktivieren
 	glEnable(GL_CULL_FACE);
+	//glCullFace(GL_FRONT); // 
 	glEnable(GL_DEPTH_TEST);
 
 	//initialisiert die standard shader
@@ -254,45 +282,46 @@ void SetupRC()
 	//erzeuge die geometrie
 	CreateGeometry();
 	InitGUI();
+
+	cameraFrame.SetOrigin(0.0f, 0.0f, 0.0f);
+	cameraFrame.SetForwardVector(0.0f, 0.0f, 1.0f);
+	cameraFrame.SetUpVector(0.0f, 1.0f, 0.0f);
 }
 
 void SpecialKeys(int key, int x, int y)
 {
-	float angleStep = 8.0f;  // Rotationswinkel in Grad
+	float angleStep = 0.1f;  // Rotationswinkel in Grad
+	float moveStep = 0.5f;  // Bewegungsschritt in Einheiten
 
 	switch (key)
 	{
 	case GLUT_KEY_UP: // 101
-		// Vorwärts bewegen
-		//zTrans -= 1.0f;
-		// Rotation um die X-Achse
-		rotation = glm::rotate(rotation, glm::radians(-angleStep), glm::vec3(1.0f, 0.0f, 0.0f));
+		// Bewegt die Kamera nach vorne entlang der lokalen Z-Achse
+		cameraFrame.MoveUp(moveStep);
+		cameraFrame.RotateLocalX(-angleStep);
 		break;
 	case GLUT_KEY_DOWN: // 103
-		// Rückwärts bewegen
-		//zTrans += 1.0f;
-		// Rotation um die X-Achse
-		rotation = glm::rotate(rotation, glm::radians(angleStep), glm::vec3(1.0f, 0.0f, 0.0f));
+		// Bewegt die Kamera nach hinten entlang der lokalen Z-Achse
+		cameraFrame.MoveUp(-moveStep);
+		cameraFrame.RotateLocalX(angleStep);
 		break;
 	case GLUT_KEY_LEFT: // 100
-		// Links bewegen
-		xTrans -= 1.0f;
-		// Rotation um die Y-Achse
-		rotation = glm::rotate(rotation, glm::radians(-angleStep), glm::vec3(0.0f, 1.0f, 0.0f));
+		// Bewegt die Kamera nach links entlang der lokalen X-Achse
+		cameraFrame.MoveRight(moveStep*0.5);
+		cameraFrame.RotateLocalY(angleStep);
 		break;
 	case GLUT_KEY_RIGHT: // 102
-		// Rechts bewegen
-		xTrans += 1.0f;
-		// Rotation um die Y-Achse
-		rotation = glm::rotate(rotation, glm::radians(angleStep), glm::vec3(0.0f, 1.0f, 0.0f));
+		// Bewegt die Kamera nach rechts entlang der lokalen X-Achse
+		cameraFrame.MoveRight(-moveStep*0.5);
+		cameraFrame.RotateLocalY(-angleStep);
 		break;
-	case GLUT_KEY_PAGE_UP:
-		// Hoch bewegen
-		yTrans += 1.0f;
+	case GLUT_KEY_PAGE_UP: // Zusätzliche Taste für Aufwärtsbewegung
+		// Bewegt die Kamera nach oben entlang der lokalen Y-Achse
+		cameraFrame.MoveUp(moveStep);
 		break;
-	case GLUT_KEY_PAGE_DOWN:
-		// Runter bewegen
-		yTrans -= 1.0f;
+	case GLUT_KEY_PAGE_DOWN: // Zusätzliche Taste für Abwärtsbewegung
+		// Bewegt die Kamera nach unten entlang der lokalen Y-Achse
+		cameraFrame.MoveUp(-moveStep);
 		break;
 	default:
 		break;
@@ -305,8 +334,22 @@ void SpecialKeys(int key, int x, int y)
 	glutPostRedisplay();
 }
 
+void Mouse(int button, int state, int x, int y)
+{
+	if (bUFO) {
+		GLfloat nXDelta = x - 500;
+		GLfloat nYDelta = 500 - y;
+		// Rotation um die y-Achse
+		GLfloat yRot = nXDelta / 100.0f;
+		// Rotation um die x-Achse
+		GLfloat xRot = nYDelta / 100.0f;
+		cameraFrame.RotateWorld(yRot, 0.0f, 1.0f, 0.0f);
+		cameraFrame.RotateLocal(xRot, 1.0f, 0.0f, 0.0f);
+	}
 
-
+	// Fenster neu zeichnen
+	glutPostRedisplay();
+}
 void ShutDownRC()
 {
 	//Aufräumen

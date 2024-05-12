@@ -167,7 +167,7 @@ void createTetrahedron(GLBatch& batch) {
 	}
 	// blue
 	for (int i = 0; i < 3; i++) {
-		batch.Color4f(0.0f, 0.0f, 1.0f, 1.0f);
+		batch.Color4f(1.0f, 0.0f, 0.0f, 1.0f);
 		batch.Vertex3fv(tetrahedron_coords[tetrahedron_indices[1][i]]);
 	}
 	// green
@@ -177,7 +177,7 @@ void createTetrahedron(GLBatch& batch) {
 	}
 	// yellow
 	for (int i = 0; i < 3; i++) {
-		batch.Color4f(1.0f, 1.0f, 0.0f, 1.0f);
+		batch.Color4f(1.0f, 0.0f, 0.0f, 1.0f);
 		batch.Vertex3fv(tetrahedron_coords[tetrahedron_indices[3][i]]);
 	}
 	batch.End();
@@ -192,6 +192,12 @@ void createCube(GLBatch& batch) {
 		// färbe den Vertex mit rot, grün oder blau ein
 		if (i < 4) {
 			batch.Color4f(1.0f, 0.0f, 0.0f, 1.0f);
+		}
+		else if (i < 8) {
+			batch.Color4f(0.0f, 1.0f, 0.0f, 1.0f);
+		}
+		else if (i < 12) {
+			batch.Color4f(0.0f, 1.0f, 0.0f, 1.0f);
 		}
 		else {
 			batch.Color4f(1.0f, 1.0f, 0.0f, 1.0f);
