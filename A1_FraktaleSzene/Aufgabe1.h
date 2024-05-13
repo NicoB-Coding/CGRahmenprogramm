@@ -41,6 +41,8 @@ GLuint cubeIndices[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 };
 const float s_8_9 = sqrt(0.8f / 0.9f); // = 0.9428f
 const float s_2_9 = sqrt(0.2f / 0.9f); // = 0.4714f
 const float s_2_3 = sqrt(0.2f / 0.3f); // = 0.8165f
+float cameraRadius = 0.0f;  // Entfernung vom Ursprung
+
 
 float tetrahedron_coords[4][3] = {
 	{ 0.0f,   0.0f,   1.0f },
@@ -206,3 +208,76 @@ void createCube(GLBatch& batch) {
 	}
 	batch.End();
 }
+
+void quaternionToOrientationAndPosition(const glm::quat& q, GLFrame& frame) {
+    // Verwende glm::mat3_cast, um eine Rotationsmatrix aus dem Quaternion zu erzeugen
+    glm::mat3 rotationMatrix = glm::mat3_cast(q);
+
+    // Der Up-Vektor für die Kamera (Y Richtung)
+    glm::vec3 up = rotationMatrix[1];
+
+    // Berechnen der neuen Kameraposition nach der Rotation
+    glm::vec3 origin =  rotationMatrix[0];  // Verwende den Right-Vektor, um die Kamera zu positionieren
+    frame.SetOrigin(origin.x, origin.y, origin.z);
+
+    // Der Forward-Vektor für die Kamera soll zum Nullpunkt zeigen
+    glm::vec3 forward = -origin;  // Richtet die Kamera zum Nullpunkt aus
+    forward = glm::normalize(forward);  // Normalisiere den Forward-Vektor
+
+    // Setzen der Vektoren im GLFrame
+    frame.SetForwardVector(forward.x, forward.y, forward.z);
+    frame.SetUpVector(up.x, up.y, up.z);
+}
+
+
+
+
+
+void DrawCoordinateSystem(float length) {
+	int gridLines = 10;  // Anzahl der Gitterlinien pro Richtung
+	float step = length / gridLines;  // Schrittgröße zwischen den Gitterlinien
+	glBegin(GL_LINES);
+
+	// Zeichnen der X-Achse in Rot
+	glColor3f(1.0f, 0.0f, 0.0f); // Rot
+	glVertex3f(0.0f, 0.0f, 0.0f);
+	glColor3f(1.0f, 0.0f, 0.0f); // Rot
+	glVertex3f(length, 0.0f, 0.0f);
+
+	// Zeichnen der Y-Achse in Grün
+	glColor3f(0.0f, 1.0f, 0.0f); // Grün
+	glVertex3f(0.0f, 0.0f, 0.0f);
+	glColor3f(0.0f, 1.0f, 0.0f); // Grün
+	glVertex3f(0.0f, length, 0.0f);
+
+	// Zeichnen der Z-Achse in Blau
+	glColor3f(0.0f, 0.0f, 1.0f); // Blau
+	glVertex3f(0.0f, 0.0f, 0.0f);
+	glColor3f(0.0f, 0.0f, 1.0f); // Blau
+
+	glVertex3f(0.0f, 0.0f, length);
+
+	// Zeichnen des weißen Gitternetzes auf der XZ-Ebene
+	glColor3f(1.0f, 1.0f, 1.0f); // Weiß
+
+	// Vertikale Linien entlang der X-Achse
+	for (int i = 0; i <= gridLines; i++) {
+		glColor3f(1.0f, 1.0f, 1.0f); // Weiß
+		glVertex3f(i * step, 0.0f, 0.0f);
+		glVertex3f(i * step, 0.0f, length);
+		glVertex3f(-i * step, 0.0f, 0.0f);
+		glVertex3f(-i * step, 0.0f, length);
+	}
+
+	// Horizontale Linien entlang der Z-Achse
+	for (int i = 0; i <= gridLines; i++) {
+		glColor3f(1.0f, 1.0f, 1.0f); // Weiß
+		glVertex3f(0.0f, 0.0f, i * step);
+		glVertex3f(length, 0.0f, i * step);
+		glVertex3f(0.0f, 0.0f, -i * step);
+		glVertex3f(length, 0.0f, -i * step);
+	}
+
+	glEnd();
+}
+

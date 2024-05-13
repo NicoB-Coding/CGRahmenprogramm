@@ -198,11 +198,9 @@ void CreateGeometry()
 
 // Aufruf draw scene
 void RenderScene(void) {
-	cameraFrame.SetOrigin(0.0f, 0.0f, 0.0f);
-	cameraFrame.SetForwardVector(0.0f, 0.0f, 1.0f);
-	cameraFrame.SetUpVector(0.0f, 1.0f, 0.0f);
+
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	modelViewMatrix.PushMatrix(cameraFrame);
+	modelViewMatrix.PushMatrix();
 	modelViewMatrix.LoadIdentity();
 
 	modelViewMatrix.Scale(globalScale, globalScale, globalScale);
@@ -210,7 +208,7 @@ void RenderScene(void) {
 		//cameraFrame.MoveForward(rotation.y);
 		//cameraFrame.MoveUp(rotation.x);
 		//cameraFrame.MoveRight(rotation.w);
-		
+		quaternionToOrientationAndPosition(glm::quat(rotation.z, rotation.w, rotation.x, rotation.y), cameraFrame);
 		// rotate the camera frame
 		M3DMatrix44f M;
 		cameraFrame.GetMatrix(M);
@@ -250,8 +248,9 @@ void RenderScene(void) {
 		modelViewMatrix.Scale(mengerScaleFactor, mengerScaleFactor, mengerScaleFactor);
 		// size animation
 		modelViewMatrix.Scale(0.25*sin(currentAnimationAngle)+0.5, 0.25*sin(currentAnimationAngle)+0.5, 0.25*sin(currentAnimationAngle)+0.5);
-		currentAnimationAngle += 0.0002f;
+		//currentAnimationAngle += 0.0002f;
 		drawMenger(depth);
+		DrawCoordinateSystem(10.0f);
 		modelViewMatrix.PopMatrix();
 	}
 
@@ -267,7 +266,7 @@ void RenderScene(void) {
 // Initialisierung des Rendering Kontextes
 void SetupRC()
 {
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClearColor(0.1f, 0.3f, 0.3f, 1.0f);
 	glFrontFace(GL_CW); // Winding Order könnte noch umgedreht werden, dafür müsste ich aber alle Indices umdrehen...
 	// Backface Culling aktivieren
 	glEnable(GL_CULL_FACE);
