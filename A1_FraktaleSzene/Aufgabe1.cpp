@@ -60,6 +60,7 @@ GLuint vBufferIdTetra;
 
 // rotation
 glm::quat rotation = glm::quat(0, 0, 0, 1);
+glm::quat orientation = glm::quat(0, 0, 0, 1);
 glm::quat animation = glm::quat(0, 0, 0, 1);
 float currentAnimationAngle = 0.0f;
 
@@ -215,8 +216,12 @@ void RenderScene(void) {
 		modelViewMatrix.MultMatrix(M);
 	}
 	else {
-		glm::mat4 rot = glm::mat4_cast(glm::quat(rotation.z, rotation.w, rotation.x, rotation.y));
-		modelViewMatrix.MultMatrix(glm::value_ptr(rot));
+		// kein UFO Modus, Kamera soll sich um die Szene bewegen
+		rotateCamera(glm::quat(rotation.z, rotation.w, rotation.x, rotation.y), cameraFrame);
+		// rotate the camera frame
+		M3DMatrix44f M;
+		cameraFrame.GetMatrix(M);
+		modelViewMatrix.MultMatrix(M);
 	}
 	// has the depth of the recursion changed?
 	if (prevDepth != depth) {

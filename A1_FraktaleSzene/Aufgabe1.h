@@ -228,6 +228,29 @@ void quaternionToOrientationAndPosition(const glm::quat& q, GLFrame& frame) {
     frame.SetForwardVector(forward.x, forward.y, forward.z);
     frame.SetUpVector(up.x, up.y, up.z);
 }
+void rotateCamera(const glm::quat& q, GLFrame& frame) {
+	// Verwende glm::mat3_cast, um eine Rotationsmatrix aus dem Quaternion zu erzeugen
+	glm::mat3 rotationMatrix = glm::mat3_cast(q);
+
+	// Erhalte die aktuellen Forward- und Up-Vektoren aus dem GLFrame
+	M3DVector3f forwardVector;
+	M3DVector3f upVector;
+	frame.GetForwardVector(forwardVector);
+	frame.GetUpVector(upVector);
+
+	glm::vec3 currentForward(forwardVector[0], forwardVector[1], forwardVector[2]);
+	glm::vec3 currentUp(upVector[0], upVector[1], upVector[2]);
+
+	// Berechne die neuen Forward- und Up-Vektoren durch Multiplikation mit der Rotationsmatrix
+	glm::vec3 newForward = rotationMatrix * currentForward;
+	glm::vec3 newUp = rotationMatrix * currentUp;
+
+	// Setze die neuen Vektoren im GLFrame
+	frame.SetForwardVector(newForward.x, newForward.y, newForward.z);
+	frame.SetUpVector(newUp.x, newUp.y, newUp.z);
+
+	// Die Position der Kamera bleibt unverändert
+}
 
 
 
