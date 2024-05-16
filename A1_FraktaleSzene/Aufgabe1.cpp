@@ -44,6 +44,9 @@ GLFrustum viewFrustum;
 TwBar* bar; // GUI bar
 GLFrame cameraFrame; // camera frame
 
+// for tetrahedron 
+std::vector<glm::vec3> vertices;
+std::vector<GLuint> indices;
 
 // batches for the geometry
 GLBatch pyramidBatch;
@@ -58,11 +61,6 @@ GLuint VAOtetra;
 GLuint indexBufferTetra;
 GLuint vBufferIdTetra;
 
-// rotation
-glm::quat rotation = glm::quat(0, 0, 0, 1);
-glm::quat orientation = glm::quat(0, 0, 0, 1);
-glm::quat animation = glm::quat(0, 0, 0, 1);
-float currentAnimationAngle = 0.0f;
 // eye point
 glm::vec3 eye = glm::vec3(0.0f, 0.0f, 0.0f);
 // look at point
@@ -73,7 +71,7 @@ glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 int depth = 0; // recursion depth
 int prevDepth = 0;
 
-GLfloat globalScale = 3.0f;
+GLfloat globalScale = 2.0f;
 float currentLength = 2.0f; // cube length
 float mengerScaleFactor = 1.0f;
 
@@ -149,7 +147,7 @@ void drawMenger(int mengerDepth) {
 						continue;
 					}
 					modelViewMatrix.PushMatrix();					
-					float scale = (1.64f * pow(3, mengerDepth-1));
+					float scale = (2.0f * pow(3, mengerDepth-1));
 					modelViewMatrix.Translate(j*scale, k*scale, l*scale);
 					// Rekursiver Aufruf für jeden Würfel
 					drawMenger(mengerDepth - 1);
@@ -195,12 +193,14 @@ void ChangeSize(int w, int h)
 
 	TwWindowSize(w, h);
 }
-
+int rotatorTest = 15;
+float x_slider = -2.5f;
+float y_slider = 1.0f;
+float z_slider = -15.0f;
 void InitGUI()
 {
 	bar = TwNewBar("TweakBar");
 	TwDefine(" TweakBar size='200 400'");
-	TwAddVarRW(bar,"Model Rotation",TW_TYPE_QUAT4F, &rotation, "");
 	// Add button to check if siepinski is drawn
 	TwAddVarRW(bar, "Draw Sierpinski", TW_TYPE_BOOLCPP, &bSierpinski, " label='Draw Sierpinski' ");
 	// Add button to check if menge sponge is drawn
@@ -213,15 +213,21 @@ void InitGUI()
 	TwAddVarRW(bar, "Perspective", TW_TYPE_BOOLCPP, &bPerspective, " label='Perspective?' ");
 	// add button for UfO mode
 	TwAddVarRW(bar, "Tether", TW_TYPE_BOOLCPP, &bTether, " label='Animation in UFO Mode?' ");
+	// rotation test
+	TwAddVarRW(bar, "Rotator", TW_TYPE_INT32, &rotatorTest, " label='Tether Rotator' min=0 max=200 step=5 ");
+	// add button for the x slider
+	TwAddVarRW(bar, "X Slider", TW_TYPE_FLOAT, &x_slider, " label='Tether X Slider' min=-20 max=20 step=0.5 ");
+	// add button for the y slider
+	TwAddVarRW(bar, "Y Slider", TW_TYPE_FLOAT, &y_slider, " label='Tether Y Slider' min=-20 max=20 step=0.5 ");
+	// add button for the z slider
+	TwAddVarRW(bar, "Z Slider", TW_TYPE_FLOAT, &z_slider, " label='Tether Z Slider' min=-20 max=20 step=0.5 ");
 }
 
 void CreateGeometry()
 {
-	std::vector<float> vertices;
-	std::vector<unsigned int> indices;
-
+	vertices.clear();
+	indices.clear();
 	generateSierpinskiTetrahedron(vertices, indices, depth);
-	//createTetrahedronWithVertexArrays(pyramidBatch);
 	createTetrahedronWithVBOVBA(VAOtetra, indexBufferTetra, vBufferIdTetra, vertices, indices);
 	createCube(cubeBatch);
 }
@@ -232,22 +238,28 @@ void RenderScene(void) {
 	modelViewMatrix.PushMatrix();
 	modelViewMatrix.LoadIdentity();
 
-	modelViewMatrix.Scale(globalScale, globalScale, globalScale);
 	float currentAngle = timer.getTotalTime();
 	// rotate the camera frame
 	if (bTether) {
 		cameraFrame.SetOrigin(0.0f, 0.0f, 0.0f);
 		cameraFrame.SetForwardVector(0.0f, 0.0f, -1.0f);
-		//cameraFrame.MoveRight(2*sin(currentAnimationAngle));
-		//cameraFrame.MoveUp(-2 * sin(currentAnimationAngle));
-		//cameraFrame.MoveForward(2*cos(currentAnimationAngle)-8.0f);
+		cameraFrame.SetUpVector(0.0f, 1.0f, 0.0f);
+
 		cameraFrame.RotateWorld(m3dDegToRad(360*currentAngle), 0.0f, 1.0f, 0.0f);
-		cameraFrame.RotateWorld(m3dDegToRad(-150), 0.0f, 1.0f, 0.0f);
-		cameraFrame.TranslateLocal(-2.0f, 1.0f, -5.0f);
+		cameraFrame.RotateWorld(m3dDegToRad(-rotatorTest), 0.0f, 1.0f, 0.0f);
+		cameraFrame.TranslateLocal(x_slider, y_slider, z_slider);
 	}
 	M3DMatrix44f M;
 	cameraFrame.GetCameraMatrix(M);
 	modelViewMatrix.MultMatrix(M);
+	// Koordinatensystem um 3 skalieren
+	modelViewMatrix.PushMatrix();
+	modelViewMatrix.Scale(3.0f, 3.0f, 3.0f);
+	shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewProjectionMatrix());
+	DrawCoordinateSystem(10.0f);
+	modelViewMatrix.PopMatrix();
+
+	modelViewMatrix.Scale(globalScale, globalScale, globalScale);
 	// has the depth of the recursion changed?
 	if (prevDepth != depth) {
 		// clear the batches
@@ -257,8 +269,7 @@ void RenderScene(void) {
 		cubeBatch = GLBatch();
 		CreateGeometry();
 	}
-	shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewProjectionMatrix());
-	DrawCoordinateSystem(10.0f);
+
 
 	// Draw the Sierpinski pyramid if bSierpinski is true
 	if (bSierpinski) {
@@ -268,26 +279,19 @@ void RenderScene(void) {
 		// ModelViewMatrix in einer Kreisbahn bewegen
 		modelViewMatrix.Translate(0.0f, 0.0f, 4.0f);
 
-		float sierpinskiScaleFactor = 1 / pow(2, depth);
-		modelViewMatrix.Scale(sierpinskiScaleFactor, sierpinskiScaleFactor, sierpinskiScaleFactor);
-		
 		shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewProjectionMatrix());
 		glBindVertexArray(VAOtetra);
 		glBindBuffer(GL_ARRAY_BUFFER, vBufferIdTetra);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferTetra);
-		glDrawElements(GL_TRIANGLES, 12*pow(4, depth), GL_UNSIGNED_INT, 0);
+		glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
 		glBindVertexArray(0);		
 		modelViewMatrix.PopMatrix();
 	}
 	if (bMengerSponge) {
-		// die würfel müssen an den richtigen stellen gezeichnet werden
 		modelViewMatrix.PushMatrix();
 		mengerScaleFactor = 1.0f / pow(3, depth);
+		modelViewMatrix.Translate(0.0f, 5 * sin(3.141 * timer.getTotalTime()), 0.0f);
 		modelViewMatrix.Scale(mengerScaleFactor, mengerScaleFactor, mengerScaleFactor);
-		modelViewMatrix.Translate(0.0f,5 * sin(3.141*timer.getTotalTime()), 0.0f);
-		// size animation
-		//modelViewMatrix.Scale(0.25*sin(currentAnimationAngle)+0.5, 0.25*sin(currentAnimationAngle)+0.5, 0.25*sin(currentAnimationAngle)+0.5);
-		currentAnimationAngle += 0.02f;
 		drawMenger(depth);
 		modelViewMatrix.PopMatrix();
 	}
@@ -378,6 +382,22 @@ void SpecialKeys(int key, int x, int y)
 		// Gierbewegung
 		cameraFrame.RotateWorld(-angleStep, 0.0f, 1.0f, 0.0f);
 		break;
+	case GLUT_KEY_F3:
+		// Rollbewegung
+		cameraFrame.RotateLocal(angleStep, 0.0f, 0.0f, 1.0f);
+		break;
+	case GLUT_KEY_F4:
+		// Rollbewegung
+		cameraFrame.RotateLocal(-angleStep, 0.0f, 0.0f, 1.0f);
+		break;
+	case GLUT_KEY_F5:
+		// Vorwärts
+		cameraFrame.MoveForward(moveStep);
+		break;
+	case GLUT_KEY_F6:
+		// Rückwärts
+		cameraFrame.MoveForward(-moveStep);
+		break;
 	default:
 		break;
 	}
@@ -389,18 +409,6 @@ void SpecialKeys(int key, int x, int y)
 	glutPostRedisplay();
 }
 
-void Mouse(int button, int state, int x, int y)
-{
-	// Wenn Linke Maustaste gedrückt wird, dann...
-	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
-		cameraFrame.MoveForward(-1.0f);
-	} else if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN) {
-		cameraFrame.MoveForward(1.0f);
-	}
-
-	// Fenster neu zeichnen
-	glutPostRedisplay();
-}
 void ShutDownRC()
 {
 	//Aufräumen
