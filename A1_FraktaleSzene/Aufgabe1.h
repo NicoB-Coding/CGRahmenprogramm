@@ -51,7 +51,6 @@ float tetrahedron_coords[4][3] = {
 	{-s_2_9, -s_2_3, -1.0f / 3.0f},
 };
 
-
 int tetrahedron_indices[4][3] = { {0, 2, 1},  {0, 3, 2},  {1, 3, 0}, {1, 2, 3} };
 GLuint tetrahedronIndices[] = { 0, 2, 1, 0 , 3, 2, 1, 3, 0, 1, 2, 3 };
 
@@ -102,7 +101,52 @@ void createTetrahedronWithVBOVBA(GLuint& VAOtetrahedron, GLuint& indexBufferTetr
 	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(ColoredVertex), (const GLvoid*)(sizeof(glm::vec3)));
 	glBindVertexArray(0);
 }
+void createTetrahedronWithVBOVBA(
+	GLuint& VAO, GLuint& VBO, GLuint& EBO,
+	const std::vector<float>& vertices, const std::vector<unsigned int>& indices) {
 
+	// Ein Array von Vertices erstellen
+	std::vector<ColoredVertex> coloredVertices(vertices.size() / 3);
+	for (size_t i = 0; i < vertices.size() / 3; ++i) {
+		coloredVertices[i].position = glm::vec3(vertices[3 * i], vertices[3 * i + 1], vertices[3 * i + 2]);
+		// Setze eine Farbe, z.B. nach einer festen Palette oder zufällig
+		if (i % 4 == 0) {
+			coloredVertices[i].color = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+		}
+		else if (i % 4 == 1) {
+			coloredVertices[i].color = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
+		}
+		else if (i % 4 == 2) {
+			coloredVertices[i].color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
+		}
+		else {
+			coloredVertices[i].color = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
+		}
+	}
+
+	// Vertex Array Object erzeugen
+	glGenVertexArrays(1, &VAO);
+	glBindVertexArray(VAO);
+
+	// Vertex Buffer Object erzeugen
+	glGenBuffers(1, &VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, coloredVertices.size() * sizeof(ColoredVertex), coloredVertices.data(), GL_STATIC_DRAW);
+
+	// Element Buffer Object erzeugen
+	glGenBuffers(1, &EBO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+
+	// Vertex Attribute Pointer setzen
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(ColoredVertex), (GLvoid*)offsetof(ColoredVertex, position));
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(ColoredVertex), (GLvoid*)offsetof(ColoredVertex, color));
+
+	// Unbind VAO
+	glBindVertexArray(0);
+}
 void createTetrahedronWithVertexArrays(GLBatch& batch) {
 	// difference here, we use CopyVertexData3f instead of Vertex3f(v)
 	batch.Begin(GL_TRIANGLES, 12);
@@ -131,7 +175,6 @@ void createTetrahedronWithVertexArrays(GLBatch& batch) {
 	batch.CopyColorData4f(glm::value_ptr(tetrahedronColors[0]));
 	batch.End();
 }
-
 void createCubeWithVertexArrays(GLBatch& batch) {
 	batch.Begin(GL_TRIANGLE_STRIP, 14);
 	glm::vec3 cubeVertices[14];
@@ -159,7 +202,6 @@ void createCubeWithVertexArrays(GLBatch& batch) {
 	batch.CopyColorData4f(glm::value_ptr(cubeColors[0]));
 	batch.End();
 }
-
 void createTetrahedron(GLBatch& batch) {
 	batch.Begin(GL_TRIANGLES, 12);
 	// red color
@@ -184,7 +226,6 @@ void createTetrahedron(GLBatch& batch) {
 	}
 	batch.End();
 }
-
 void createCube(GLBatch& batch) {
 	batch.Begin(GL_TRIANGLE_STRIP, 14);
 	// each side of the cube is drawn with a different color
@@ -208,7 +249,6 @@ void createCube(GLBatch& batch) {
 	}
 	batch.End();
 }
-
 void quaternionToOrientationAndPosition(const glm::quat& q, GLFrame& frame) {
     // Verwende glm::mat3_cast, um eine Rotationsmatrix aus dem Quaternion zu erzeugen
     glm::mat3 rotationMatrix = glm::mat3_cast(q);
@@ -228,12 +268,6 @@ void quaternionToOrientationAndPosition(const glm::quat& q, GLFrame& frame) {
     frame.SetForwardVector(forward.x, forward.y, forward.z);
     frame.SetUpVector(up.x, up.y, up.z);
 }
-
-
-
-
-
-
 void DrawCoordinateSystem(float length) {
 	int gridLines = 10;  // Anzahl der Gitterlinien pro Richtung
 	float step = length / gridLines;  // Schrittgröße zwischen den Gitterlinien
@@ -281,5 +315,52 @@ void DrawCoordinateSystem(float length) {
 
 	glEnd();
 }
+void m3dMidPoint(float result[3], const float a[3], const float b[3]) {
+	result[0] = (a[0] + b[0]) / 2.0f;
+	result[1] = (a[1] + b[1]) / 2.0f;
+	result[2] = (a[2] + b[2]) / 2.0f;
+}
 
+void addTriangle(std::vector<float>& vertices, std::vector<unsigned int>& indices,
+	const float v0[3], const float v1[3], const float v2[3], unsigned int& index) {
+	vertices.insert(vertices.end(), { v0[0], v0[1], v0[2] });
+	vertices.insert(vertices.end(), { v1[0], v1[1], v1[2] });
+	vertices.insert(vertices.end(), { v2[0], v2[1], v2[2] });
 
+	indices.push_back(index++);
+	indices.push_back(index++);
+	indices.push_back(index++);
+}
+
+// Diese Funktion teilt ein Dreieck rekursiv in vier Unterdreiecke, bis die Tiefe 0 erreicht ist
+void divideTriangle(std::vector<float>& vertices, std::vector<unsigned int>& indices,
+	const float v0[], const float v1[], const float v2[], const float v3[], int depth, unsigned int& index) {
+	if (depth == 0) {
+		addTriangle(vertices, indices, v0, v2, v1, index);
+		addTriangle(vertices, indices, v0, v1, v3, index);
+		addTriangle(vertices, indices, v0, v3, v2, index);
+		addTriangle(vertices, indices, v1, v2, v3, index);
+	}
+	else {
+		float v01[3], v12[3], v20[3], v03[3], v13[3], v23[3];
+		m3dMidPoint(v01, v0, v1);
+		m3dMidPoint(v12, v1, v2);
+		m3dMidPoint(v20, v2, v0);
+		m3dMidPoint(v03, v0, v3);
+		m3dMidPoint(v13, v1, v3);
+		m3dMidPoint(v23, v2, v3);
+		divideTriangle(vertices, indices, v0, v01, v20, v03, depth - 1, index);
+		divideTriangle(vertices, indices, v01, v1, v12, v13, depth - 1, index);
+		divideTriangle(vertices, indices, v20, v12, v2, v23, depth - 1, index);
+		divideTriangle(vertices, indices, v03, v13, v23, v3, depth - 1, index);
+	}
+}
+
+void generateSierpinskiTetrahedron(std::vector<float>& vertices, std::vector<unsigned int>& indices, int recursionDepth) {
+	float v0[3] = { 0.0f, 0.0f, 1.0f };
+	float v1[3] = { s_8_9, 0.0f, -1.0f / 3.0f };
+	float v2[3] = { -s_2_9, s_2_3, -1.0f / 3.0f };
+	float v3[3] = { -s_2_9, -s_2_3, -1.0f / 3.0f };
+	unsigned int index = 0;
+	divideTriangle(vertices, indices, v0, v1, v2, v3, recursionDepth, index);
+}

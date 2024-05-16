@@ -73,7 +73,7 @@ glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 int depth = 0; // recursion depth
 int prevDepth = 0;
 
-GLfloat globalScale = 2.7f;
+GLfloat globalScale = 3.0f;
 float currentLength = 2.0f; // cube length
 float mengerScaleFactor = 1.0f;
 
@@ -86,8 +86,8 @@ static float zTrans = 0.0f;
 bool bSierpinski = false;
 bool bMengerSponge = false;
 bool bDepth = true;
-bool bPerspective = false;
-bool bUFO = false;
+bool bPerspective = true;
+bool bTether = false;
 
 
 char fpsCount[512];
@@ -149,7 +149,7 @@ void drawMenger(int mengerDepth) {
 						continue;
 					}
 					modelViewMatrix.PushMatrix();					
-					float scale = 1.64f * pow(3, mengerDepth-1);
+					float scale = (1.64f * pow(3, mengerDepth-1));
 					modelViewMatrix.Translate(j*scale, k*scale, l*scale);
 					// Rekursiver Aufruf für jeden Würfel
 					drawMenger(mengerDepth - 1);
@@ -177,6 +177,8 @@ void ChangeSize(int w, int h)
 	if (bPerspective) {
 		// Definiere das viewing volume (left, right, bottom, top, near, far)
 		viewFrustum.SetPerspective(50.0f, float(w) / float(h), 1.0f, 100.0f);
+		// Augenpunkt Transformation des Camera Frames
+		cameraFrame.MoveForward(-15.0f);
 	}
 	else {
 		// Definiere das viewing volume (left, right, bottom, top, near, far)
@@ -210,44 +212,42 @@ void InitGUI()
 	// add button to change the perspective
 	TwAddVarRW(bar, "Perspective", TW_TYPE_BOOLCPP, &bPerspective, " label='Perspective?' ");
 	// add button for UfO mode
-	TwAddVarRW(bar, "UFO", TW_TYPE_BOOLCPP, &bUFO, " label='Animation in UFO Mode?' ");
+	TwAddVarRW(bar, "Tether", TW_TYPE_BOOLCPP, &bTether, " label='Animation in UFO Mode?' ");
 }
 
 void CreateGeometry()
 {
+	std::vector<float> vertices;
+	std::vector<unsigned int> indices;
+
+	generateSierpinskiTetrahedron(vertices, indices, depth);
 	//createTetrahedronWithVertexArrays(pyramidBatch);
-	createTetrahedronWithVBOVBA(VAOtetra, indexBufferTetra, vBufferIdTetra);
-	createCubeWithVertexArrays(cubeBatch);
+	createTetrahedronWithVBOVBA(VAOtetra, indexBufferTetra, vBufferIdTetra, vertices, indices);
+	createCube(cubeBatch);
 }
 
 // Aufruf draw scene
 void RenderScene(void) {
-
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	modelViewMatrix.PushMatrix();
 	modelViewMatrix.LoadIdentity();
 
 	modelViewMatrix.Scale(globalScale, globalScale, globalScale);
-	if (bUFO) {
-		//cameraFrame.MoveForward(rotation.y);
-		//cameraFrame.MoveUp(rotation.x);
-		//cameraFrame.MoveRight(rotation.w);
-		quaternionToOrientationAndPosition(glm::quat(rotation.z, rotation.w, rotation.x, rotation.y), cameraFrame);
-		// rotate the camera frame
-		M3DMatrix44f M;
-		cameraFrame.GetMatrix(M);
-		modelViewMatrix.MultMatrix(M);
+	float currentAngle = timer.getTotalTime();
+	// rotate the camera frame
+	if (bTether) {
+		cameraFrame.SetOrigin(0.0f, 0.0f, 0.0f);
+		cameraFrame.SetForwardVector(0.0f, 0.0f, -1.0f);
+		//cameraFrame.MoveRight(2*sin(currentAnimationAngle));
+		//cameraFrame.MoveUp(-2 * sin(currentAnimationAngle));
+		//cameraFrame.MoveForward(2*cos(currentAnimationAngle)-8.0f);
+		cameraFrame.RotateWorld(m3dDegToRad(360*currentAngle), 0.0f, 1.0f, 0.0f);
+		cameraFrame.RotateWorld(m3dDegToRad(-150), 0.0f, 1.0f, 0.0f);
+		cameraFrame.TranslateLocal(-2.0f, 1.0f, -5.0f);
 	}
-	else {
-		// kein UFO Modus, Kamera soll sich um die Szene bewegen
-		//cameraFrame.SetForwardVector(lookAt.x, lookAt.y, lookAt.z);
-		//cameraFrame.SetOrigin(eye.x, eye.y, eye.z);
-		//cameraFrame.SetUpVector(up.x, up.y, up.z);
-		// rotate the camera frame
-		M3DMatrix44f M;
-		cameraFrame.GetMatrix(M);
-		modelViewMatrix.MultMatrix(M);
-	}
+	M3DMatrix44f M;
+	cameraFrame.GetCameraMatrix(M);
+	modelViewMatrix.MultMatrix(M);
 	// has the depth of the recursion changed?
 	if (prevDepth != depth) {
 		// clear the batches
@@ -257,18 +257,26 @@ void RenderScene(void) {
 		cubeBatch = GLBatch();
 		CreateGeometry();
 	}
+	shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewProjectionMatrix());
+	DrawCoordinateSystem(10.0f);
+
 	// Draw the Sierpinski pyramid if bSierpinski is true
 	if (bSierpinski) {
 		modelViewMatrix.PushMatrix();		
 		// rotate with a very small angle
-		modelViewMatrix.Rotate(100*currentAnimationAngle, 0.0f, 1.0f, 0.0f);
+		modelViewMatrix.Rotate(360*currentAngle, 0.0f, 1.0f, 0.0f);
 		// ModelViewMatrix in einer Kreisbahn bewegen
-		modelViewMatrix.Translate(2*sin(currentAnimationAngle), 0.0f, 2*cos(currentAnimationAngle));
-		currentAnimationAngle += 0.0002f;
+		modelViewMatrix.Translate(0.0f, 0.0f, 4.0f);
 
 		float sierpinskiScaleFactor = 1 / pow(2, depth);
 		modelViewMatrix.Scale(sierpinskiScaleFactor, sierpinskiScaleFactor, sierpinskiScaleFactor);
-		drawSierpinski(depth);
+		
+		shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewProjectionMatrix());
+		glBindVertexArray(VAOtetra);
+		glBindBuffer(GL_ARRAY_BUFFER, vBufferIdTetra);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferTetra);
+		glDrawElements(GL_TRIANGLES, 12*pow(4, depth), GL_UNSIGNED_INT, 0);
+		glBindVertexArray(0);		
 		modelViewMatrix.PopMatrix();
 	}
 	if (bMengerSponge) {
@@ -276,11 +284,11 @@ void RenderScene(void) {
 		modelViewMatrix.PushMatrix();
 		mengerScaleFactor = 1.0f / pow(3, depth);
 		modelViewMatrix.Scale(mengerScaleFactor, mengerScaleFactor, mengerScaleFactor);
+		modelViewMatrix.Translate(0.0f,5 * sin(3.141*timer.getTotalTime()), 0.0f);
 		// size animation
-		modelViewMatrix.Scale(0.25*sin(currentAnimationAngle)+0.5, 0.25*sin(currentAnimationAngle)+0.5, 0.25*sin(currentAnimationAngle)+0.5);
-		//currentAnimationAngle += 0.0002f;
+		//modelViewMatrix.Scale(0.25*sin(currentAnimationAngle)+0.5, 0.25*sin(currentAnimationAngle)+0.5, 0.25*sin(currentAnimationAngle)+0.5);
+		currentAnimationAngle += 0.02f;
 		drawMenger(depth);
-		DrawCoordinateSystem(10.0f);
 		modelViewMatrix.PopMatrix();
 	}
 
@@ -321,7 +329,7 @@ void SetupRC()
 	CreateGeometry();
 	InitGUI();
 
-	cameraFrame.SetOrigin(0.0f, 0.0f, 0.0f);
+	cameraFrame.SetOrigin(1.0f, 2.0f, -10.0f);
 	cameraFrame.SetForwardVector(0.0f, 0.0f, 1.0f);
 	cameraFrame.SetUpVector(0.0f, 1.0f, 0.0f);
 }
@@ -333,6 +341,12 @@ void SpecialKeys(int key, int x, int y)
 
 	switch (key)
 	{
+		// strg
+	case 114: 
+		cameraFrame.SetOrigin(1.0f, 2.0f, -15.0f);
+		cameraFrame.SetForwardVector(0.0f, 0.0f, 1.0f);
+		cameraFrame.SetUpVector(0.0f, 1.0f, 0.0f);
+		break;
 	case GLUT_KEY_UP: // 101
 		cameraFrame.MoveUp(moveStep);
 		break;
@@ -411,7 +425,8 @@ int main(int argc, char* argv[])
 	
 	//GLUT Callbacks setzen
 	//Um Mausevents selbst zu erhalten eigene Funktionen für glutMouseFunc, glutMotionFunc, glutPassiveMotionFunc setzen
-	glutMouseFunc(Mouse);
+	//glutMouseFunc(Mouse);
+	glutMouseFunc((GLUTmousebuttonfun)TwEventMouseButtonGLUT);
 	glutMotionFunc((GLUTmousemotionfun)TwEventMouseMotionGLUT);
 	glutPassiveMotionFunc((GLUTmousemotionfun)TwEventMouseMotionGLUT); // same as MouseMotion
 	glutKeyboardFunc((GLUTkeyboardfun)TwEventKeyboardGLUT);
