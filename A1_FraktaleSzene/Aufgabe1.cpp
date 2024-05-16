@@ -33,7 +33,7 @@ d.h. für OpenGL mit Hilfe der GLBatch-Klasse aus der GLTools-Library und den Met
 #include "Aufgabe1.h"
 #define GL_PI 3.1415f
 #include <GL/glut.h>
-#include <Utils/Timer.h>
+#include "../Utils/Timer.h"
 
 // matrix and shader stuff
 GLShaderManager shaderManager;
@@ -63,7 +63,12 @@ glm::quat rotation = glm::quat(0, 0, 0, 1);
 glm::quat orientation = glm::quat(0, 0, 0, 1);
 glm::quat animation = glm::quat(0, 0, 0, 1);
 float currentAnimationAngle = 0.0f;
-
+// eye point
+glm::vec3 eye = glm::vec3(0.0f, 0.0f, 0.0f);
+// look at point
+glm::vec3 lookAt = glm::vec3(0.0f, 0.0f, -1.0f);
+// up vector
+glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 
 int depth = 0; // recursion depth
 int prevDepth = 0;
@@ -84,16 +89,34 @@ bool bDepth = true;
 bool bPerspective = false;
 bool bUFO = false;
 
+
+char fpsCount[512];
+int FPS = 0;
+Timer timer;
+void CalcFPS()
+{
+	if (timer.getTotalTime() >= 1.0f)
+	{
+		sprintf(fpsCount, "%d FPS x1000", FPS); // build title string
+
+		glutSetWindowTitle(fpsCount); // set FPS as window title
+		FPS = 0;
+		timer.restart();
+	}else
+	{
+		FPS++;
+	}
+}
 void drawSierpinski(int sierpinskiDepth) {
 	if (sierpinskiDepth == 0) {
 		// Grundfall: Zeichne ein einzelnes Tetraeder
 		shaderManager.UseStockShader(GLT_SHADER_FLAT_ATTRIBUTES, transformPipeline.GetModelViewProjectionMatrix());
-		pyramidBatch.Draw();
-		//glBindVertexArray(VAOtetra);
-		//glBindBuffer(GL_ARRAY_BUFFER, vBufferIdTetra);
-		//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferTetra);
-		//glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
-		//glBindVertexArray(0);
+		//pyramidBatch.Draw();
+		glBindVertexArray(VAOtetra);
+		glBindBuffer(GL_ARRAY_BUFFER, vBufferIdTetra);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferTetra);
+		glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
+		glBindVertexArray(0);
 	}
 	else {
 		// Rekursiver Fall: Erzeuge 4 kleinere Tetraeder
@@ -139,7 +162,7 @@ void drawMenger(int mengerDepth) {
 
 void ChangeSize(int w, int h)
 {
-	GLfloat nRange = 15.0f;
+	GLfloat nRange = 30.0f;
 
 	// Verhindere eine Division durch Null
 	if (h == 0)
@@ -192,9 +215,9 @@ void InitGUI()
 
 void CreateGeometry()
 {
-	createTetrahedron(pyramidBatch);
-	//createTetrahedronWithVBOVBA(VAOtetra, indexBufferTetra, vBufferIdTetra);
-	createCube(cubeBatch);
+	//createTetrahedronWithVertexArrays(pyramidBatch);
+	createTetrahedronWithVBOVBA(VAOtetra, indexBufferTetra, vBufferIdTetra);
+	createCubeWithVertexArrays(cubeBatch);
 }
 
 // Aufruf draw scene
@@ -217,7 +240,9 @@ void RenderScene(void) {
 	}
 	else {
 		// kein UFO Modus, Kamera soll sich um die Szene bewegen
-		rotateCamera(glm::quat(rotation.z, rotation.w, rotation.x, rotation.y), cameraFrame);
+		//cameraFrame.SetForwardVector(lookAt.x, lookAt.y, lookAt.z);
+		//cameraFrame.SetOrigin(eye.x, eye.y, eye.z);
+		//cameraFrame.SetUpVector(up.x, up.y, up.z);
 		// rotate the camera frame
 		M3DMatrix44f M;
 		cameraFrame.GetMatrix(M);
@@ -264,6 +289,8 @@ void RenderScene(void) {
 	modelViewMatrix.PopMatrix();
 	gltCheckErrors();
 	TwDraw();
+	// Berechne die FPS
+	CalcFPS();
 	glutSwapBuffers();
 	glutPostRedisplay();
 }
@@ -277,7 +304,14 @@ void SetupRC()
 	glEnable(GL_CULL_FACE);
 	//glCullFace(GL_FRONT); // 
 	glEnable(GL_DEPTH_TEST);
+	if (strstr((char*)glGetString(GL_EXTENSIONS), "WGL_EXT_swap_control") != NULL)
 
+	{
+		typedef BOOL(APIENTRY* PFNWGLSWAPINTERVALFARPROC)(int);
+		PFNWGLSWAPINTERVALFARPROC wglSwapIntervalEXT = 0;
+		wglSwapIntervalEXT = (PFNWGLSWAPINTERVALFARPROC)wglGetProcAddress("wglSwapIntervalEXT");
+		if (wglSwapIntervalEXT != NULL) wglSwapIntervalEXT(0);
+	}
 	//initialisiert die standard shader
 	shaderManager.InitializeStockShaders();
 	//Matrix stacks für die Transformationspipeline setzen, damit werden dann automatisch die Matrizen multipliziert
@@ -300,32 +334,35 @@ void SpecialKeys(int key, int x, int y)
 	switch (key)
 	{
 	case GLUT_KEY_UP: // 101
-		// Bewegt die Kamera nach vorne entlang der lokalen Z-Achse
 		cameraFrame.MoveUp(moveStep);
-		cameraFrame.RotateLocalX(-angleStep);
 		break;
 	case GLUT_KEY_DOWN: // 103
-		// Bewegt die Kamera nach hinten entlang der lokalen Z-Achse
+		// Auge nach oben
 		cameraFrame.MoveUp(-moveStep);
-		cameraFrame.RotateLocalX(angleStep);
 		break;
 	case GLUT_KEY_LEFT: // 100
 		// Bewegt die Kamera nach links entlang der lokalen X-Achse
-		cameraFrame.MoveRight(moveStep*0.5);
-		cameraFrame.RotateLocalY(angleStep);
+		cameraFrame.MoveRight(moveStep);
 		break;
 	case GLUT_KEY_RIGHT: // 102
 		// Bewegt die Kamera nach rechts entlang der lokalen X-Achse
-		cameraFrame.MoveRight(-moveStep*0.5);
-		cameraFrame.RotateLocalY(-angleStep);
+		cameraFrame.MoveRight(-moveStep);
 		break;
-	case GLUT_KEY_PAGE_UP: // Zusätzliche Taste für Aufwärtsbewegung
-		// Bewegt die Kamera nach oben entlang der lokalen Y-Achse
-		cameraFrame.MoveUp(moveStep);
+	case GLUT_KEY_PAGE_UP: 
+		// Nickbewegung
+		cameraFrame.RotateLocal(angleStep, 1.0f, 0.0f, 0.0f);
 		break;
 	case GLUT_KEY_PAGE_DOWN: // Zusätzliche Taste für Abwärtsbewegung
-		// Bewegt die Kamera nach unten entlang der lokalen Y-Achse
-		cameraFrame.MoveUp(-moveStep);
+		// Nickbewegung
+		cameraFrame.RotateLocal(-angleStep, 1.0f, 0.0f, 0.0f);
+		break;
+	case GLUT_KEY_F1:
+		// Gierbewegung
+		cameraFrame.RotateWorld(angleStep, 0.0f, 1.0f, 0.0f);
+		break;
+	case GLUT_KEY_F2:
+		// Gierbewegung
+		cameraFrame.RotateWorld(-angleStep, 0.0f, 1.0f, 0.0f);
 		break;
 	default:
 		break;
@@ -340,15 +377,11 @@ void SpecialKeys(int key, int x, int y)
 
 void Mouse(int button, int state, int x, int y)
 {
-	if (bUFO) {
-		GLfloat nXDelta = x - 500;
-		GLfloat nYDelta = 500 - y;
-		// Rotation um die y-Achse
-		GLfloat yRot = nXDelta / 100.0f;
-		// Rotation um die x-Achse
-		GLfloat xRot = nYDelta / 100.0f;
-		cameraFrame.RotateWorld(yRot, 0.0f, 1.0f, 0.0f);
-		cameraFrame.RotateLocal(xRot, 1.0f, 0.0f, 0.0f);
+	// Wenn Linke Maustaste gedrückt wird, dann...
+	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
+		cameraFrame.MoveForward(-1.0f);
+	} else if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN) {
+		cameraFrame.MoveForward(1.0f);
 	}
 
 	// Fenster neu zeichnen
@@ -378,7 +411,7 @@ int main(int argc, char* argv[])
 	
 	//GLUT Callbacks setzen
 	//Um Mausevents selbst zu erhalten eigene Funktionen für glutMouseFunc, glutMotionFunc, glutPassiveMotionFunc setzen
-	glutMouseFunc((GLUTmousebuttonfun)TwEventMouseButtonGLUT);
+	glutMouseFunc(Mouse);
 	glutMotionFunc((GLUTmousemotionfun)TwEventMouseMotionGLUT);
 	glutPassiveMotionFunc((GLUTmousemotionfun)TwEventMouseMotionGLUT); // same as MouseMotion
 	glutKeyboardFunc((GLUTkeyboardfun)TwEventKeyboardGLUT);

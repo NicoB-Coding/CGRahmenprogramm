@@ -40,7 +40,6 @@ bool bOutline = true;
 bool bDepth = true;
 bool bFrontFace = true;
 
-
 //GUI
 TwBar *bar;
 void InitGUI()
