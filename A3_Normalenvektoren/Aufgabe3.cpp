@@ -92,6 +92,8 @@ void CreateGeometry()
 		//die Normalen anhand der Dreiecke selbst berechnen. Die Normalen
 		//müssen immer vor jedem Vertex gesetzt werden!
 
+		// Idee: Suche für jeden Vertex alle angrenzenden Dreiecke und berechne die Normalen
+		// Je nach Grenzwinkel zwischen den Normalen wird dann gemittelt oder nicht
 		modelBatch->Normal3f(tr->vertex[0].normal.x,tr->vertex[0].normal.y,tr->vertex[0].normal.z);
 		modelBatch->Vertex3f(tr->vertex[0].pos.x,tr->vertex[0].pos.y,tr->vertex[0].pos.z);
 
