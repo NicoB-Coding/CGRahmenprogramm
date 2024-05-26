@@ -45,18 +45,19 @@ GLShaderManager shaderManager;
 GLFrustum viewFrustum;
 //Ein Pointer ist hier notwendig, da Sie nach jeder Normalenberechnung
 //neue Werte in die Batch schreiben müssen.
-GLBatch* modelBatch = NULL;
+GLBatch modelBatch;
+GLBatch normalBatch;
 obj::Model model;
 //Dateiname für das Modell.
-const std::string modelFile = "../Modelle/cylinder.obj";
+const std::string modelFile = "../Modelle/bunny.obj";
 GLuint shaders;
 
 glm::quat rotation = glm::quat(0, 0, 0, 1);
 
 TwBar *bar;
 
-float grenzWinkel = 0.0f;
-
+float grenzWinkel = 45.0f;
+float previousGrenzWinkel = 45.0f;
 
 void TW_CALL angleSetCallback(const void * value, void * clientData)
 {
@@ -81,29 +82,120 @@ void CreateGeometry()
 {
 	//Modell laden und Batch erzeugen.
 	model.Load(modelFile);
+	normalBatch.Reset();
+	modelBatch.Reset();
+	modelBatch = GLBatch();
+	normalBatch = GLBatch();
 	
-	modelBatch = new GLBatch();
-	modelBatch->Begin(GL_TRIANGLES,model.GetTriangleCount()*3);
+	modelBatch.Begin(GL_TRIANGLES,model.GetTriangleCount()*3);
+	// für jedes Triangle, mache ich 2 Vertex calls für jeden Vertex
+	// normalsToDraw enthält noch einen Index zu welchem Vertex-Index die Normale gehört
+	std::vector<std::vector<glm::vec3>> normalsToDraw;
+	std::vector <glm::vec3> batchNormals;
 	for (unsigned int i =0; i < model.GetTriangleCount();++i)
 	{
+		normalsToDraw.clear();
+		normalsToDraw.resize(3);
 		obj::Triangle* tr = model.GetTriangle(i);
-		//Hier werden die Normalen nur als Beispiel aus Obj-Loader verwendet.
-		//Beim Zylinder sind sie allerdings bewusst falsch. Daher müssen Sie 
-		//die Normalen anhand der Dreiecke selbst berechnen. Die Normalen
-		//müssen immer vor jedem Vertex gesetzt werden!
+		std::vector<glm::vec3> normals; // Liste der einzigartigen normalen
+		for (int point = 0; point < 3; point++) {
+			normals.clear();
+			// Kreuzprodukt der Kanten
+			glm::vec3 edge1 = glm::vec3(tr->vertex[1].pos.x - tr->vertex[0].pos.x, tr->vertex[1].pos.y - tr->vertex[0].pos.y, tr->vertex[1].pos.z - tr->vertex[0].pos.z);
+			glm::vec3 edge2 = glm::vec3(tr->vertex[2].pos.x - tr->vertex[0].pos.x, tr->vertex[2].pos.y - tr->vertex[0].pos.y, tr->vertex[2].pos.z - tr->vertex[0].pos.z);
+			glm::vec3 normal = glm::normalize(glm::cross(edge1, edge2));
+			normals.push_back(normal);
 
-		// Idee: Suche für jeden Vertex alle angrenzenden Dreiecke und berechne die Normalen
-		// Je nach Grenzwinkel zwischen den Normalen wird dann gemittelt oder nicht
-		modelBatch->Normal3f(tr->vertex[0].normal.x,tr->vertex[0].normal.y,tr->vertex[0].normal.z);
-		modelBatch->Vertex3f(tr->vertex[0].pos.x,tr->vertex[0].pos.y,tr->vertex[0].pos.z);
+			obj::Model::PrimitiveCollection adjacentTriangles;
 
-		modelBatch->Normal3f(tr->vertex[1].normal.x,tr->vertex[1].normal.y,tr->vertex[1].normal.z);
-		modelBatch->Vertex3f(tr->vertex[1].pos.x,tr->vertex[1].pos.y,tr->vertex[1].pos.z);
+			obj::Vertex* v = &tr->vertex[point];
+			model.GetAdjacentTriangles(adjacentTriangles, v);
 
-		modelBatch->Normal3f(tr->vertex[2].normal.x,tr->vertex[2].normal.y,tr->vertex[2].normal.z);
-		modelBatch->Vertex3f(tr->vertex[2].pos.x,tr->vertex[2].pos.y,tr->vertex[2].pos.z);
+			// suche die anliegenden Normalen heraus
+			for (unsigned int j = 0; j < adjacentTriangles.size(); j++)
+			{
+				obj::Triangle* adjTr = adjacentTriangles[j];
+				// Kreuzprodukt der Kanten
+				glm::vec3 edge1 = glm::vec3(adjTr->vertex[1].pos.x - adjTr->vertex[0].pos.x, adjTr->vertex[1].pos.y - adjTr->vertex[0].pos.y, adjTr->vertex[1].pos.z - adjTr->vertex[0].pos.z);
+				glm::vec3 edge2 = glm::vec3(adjTr->vertex[2].pos.x - adjTr->vertex[0].pos.x, adjTr->vertex[2].pos.y - adjTr->vertex[0].pos.y, adjTr->vertex[2].pos.z - adjTr->vertex[0].pos.z);
+				glm::vec3 normal = glm::normalize(glm::cross(edge1, edge2));
+				bool found = false;
+				for (unsigned int k = 0; k < normals.size(); k++)
+				{
+					// if the angle between the normals is less than the threshold, add the normal
+					float angle = glm::degrees(glm::acos(glm::dot(normals[k], normal)));
+					if (angle < 0.1f)
+					{
+						found = true;
+						break;
+					}
+				}
+				if (!found)
+				{
+					normals.push_back(normal);
+				}
+			}
+
+			normal = glm::vec3(0, 0, 0);
+			std::vector<bool> used(normals.size(), false); // Verfolgung der verwendeten Normalen
+			std::vector<glm::vec3> normalsToAverage;
+
+			for (int i = 0; i < normals.size(); i++) {
+				if (used[i]) continue;
+				normalsToAverage.clear();
+				normalsToAverage.push_back(normals[i]);
+				used[i] = true;
+
+				for (int j = i + 1; j < normals.size(); j++) {
+					if (used[j]) continue;
+					float angle = glm::degrees(glm::acos(glm::dot(normals[i], normals[j])));
+					if (angle < grenzWinkel) {
+						normalsToAverage.push_back(normals[j]);
+						used[j] = true;
+					}
+				}
+
+				glm::vec3 averagedNormal = glm::vec3(0, 0, 0);
+				for (const auto& n : normalsToAverage) {
+					averagedNormal += n;
+				}
+				averagedNormal = glm::normalize(averagedNormal);
+
+				normalsToDraw[point].push_back(averagedNormal);
+			}
+
+			// Ensure all unused normals are added to normalsToDraw
+			for (int i = 0; i < normals.size(); i++) {
+				if (!used[i]) {
+					normalsToDraw[point].push_back(normals[i]);
+				}
+			}
+
+		}
+
+		// durchlaufe normalsToDraw und füge die normalen in den Batch ein
+		for (int point = 0; point < 3; point++) {
+			for (int i = 0; i < normalsToDraw[point].size(); i++) {
+				batchNormals.push_back(glm::vec3(tr->vertex[point].pos.x, tr->vertex[point].pos.y, tr->vertex[point].pos.z));
+				batchNormals.push_back(glm::vec3(tr->vertex[point].pos.x + 0.1f * normalsToDraw[point][i].x, tr->vertex[point].pos.y + 0.1f * normalsToDraw[point][i].y, tr->vertex[point].pos.z + 0.1f * normalsToDraw[point][i].z));
+			}
+		}
+		modelBatch.Normal3f(tr->vertex[0].normal.x,tr->vertex[0].normal.y,tr->vertex[0].normal.z);
+		modelBatch.Vertex3f(tr->vertex[0].pos.x,tr->vertex[0].pos.y,tr->vertex[0].pos.z);
+
+		modelBatch.Normal3f(tr->vertex[1].normal.x,tr->vertex[1].normal.y,tr->vertex[1].normal.z);
+		modelBatch.Vertex3f(tr->vertex[1].pos.x,tr->vertex[1].pos.y,tr->vertex[1].pos.z);
+
+		modelBatch.Normal3f(tr->vertex[2].normal.x,tr->vertex[2].normal.y,tr->vertex[2].normal.z);
+		modelBatch.Vertex3f(tr->vertex[2].pos.x,tr->vertex[2].pos.y,tr->vertex[2].pos.z);
 	}
-	modelBatch->End();
+	normalBatch.Begin(GL_LINES, batchNormals.size());
+	for (int i = 0; i < batchNormals.size(); i += 2) {
+		normalBatch.Vertex3f(batchNormals[i].x, batchNormals[i].y, batchNormals[i].z);
+		normalBatch.Vertex3f(batchNormals[i + 1].x, batchNormals[i + 1].y, batchNormals[i + 1].z);
+	}
+	modelBatch.End();
+	normalBatch.End();
 	//Shader Programme laden.  Die letzen Argumente geben die Shader-Attribute an. Hier wird Vertex und Normale gebraucht.
 	shaders =  gltLoadShaderPairWithAttributes("VertexShader.glsl", "FragmentShader.glsl", 2, 
 		GLT_ATTRIBUTE_VERTEX, "vVertex", 
@@ -128,6 +220,7 @@ void RenderScene(void)
 	// Speichere den matrix state und führe die Rotation durch
 	modelViewMatrix.PushMatrix();
 
+
 	// Rotiere Objekt
 	glm::mat4 rot = glm::mat4_cast(glm::quat(rotation.z, rotation.w, rotation.x, rotation.y));
 	modelViewMatrix.MultMatrix(glm::value_ptr(rot));
@@ -148,10 +241,15 @@ void RenderScene(void)
 	glUniform4fv(glGetUniformLocation(shaders, "ambient_color"),1,ambient_color);
 	glUniform4fv(glGetUniformLocation(shaders, "mat_diffuse"),1,mat_diffuse);
 	glUniform4fv(glGetUniformLocation(shaders, "mat_specular"),1,mat_specular);
+	if (previousGrenzWinkel != grenzWinkel) {
+		previousGrenzWinkel = grenzWinkel;
+		normalBatch.~GLBatch();
+		modelBatch.~GLBatch();
+		CreateGeometry();
+	}
 
-	//Modell zeichnen
-	if(modelBatch)
-		modelBatch->Draw();
+	modelBatch.Draw();
+	normalBatch.Draw();
 	
 	// Hole die im Stack gespeicherten Transformationsmatrizen wieder zurück
 	modelViewMatrix.PopMatrix();
@@ -179,7 +277,6 @@ void SetupRC()
 
 void ShutDownRC()
 {
-	delete modelBatch;
 	glDeleteProgram(shaders);
 	TwTerminate();
 	
