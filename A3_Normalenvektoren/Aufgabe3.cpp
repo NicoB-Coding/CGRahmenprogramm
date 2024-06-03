@@ -50,9 +50,6 @@ obj::Model model;
 //Dateiname für das Modell.
 const std::string modelFile = "../Modelle/cylinder.obj";
 GLuint shaders;
-GLuint uniform_block[2];
-GLuint binding_point_mat = 1;
-
 
 glm::quat rotation = glm::quat(0, 0, 0, 1);
 
@@ -64,6 +61,8 @@ bool bInfiniteLight = true;
 bool bSmoothShading = true;
 bool bShowNormals = false;
 bool bPreviousSmoothShading = true;
+bool bPhongShading = false;
+bool bPreviousPhongShading = false;
 
 void TW_CALL angleSetCallback(const void * value, void * clientData)
 {
@@ -85,6 +84,7 @@ void InitGUI()
     TwAddVarRW(bar, "Position", TW_TYPE_DIR3F, &light_pos, "group='Light' axisx=-x axisy=-y axisz=-z");
 	TwAddVarRW(bar, "Infinite Light?", TW_TYPE_BOOLCPP, &bInfiniteLight,"");
 	TwAddVarRW(bar, "Smooth Shading?", TW_TYPE_BOOLCPP, &bSmoothShading,"");
+	TwAddVarRW(bar, "Phong Shading?", TW_TYPE_BOOLCPP, &bPhongShading, "");
 	TwAddVarRW(bar, "Show Normals?", TW_TYPE_BOOLCPP, &bShowNormals,"");
 	// RGBA Slider
 	TwAddVarRW(bar, "Diffuse", TW_TYPE_COLOR4F, &light_diffuse, "group='Light'");
@@ -103,8 +103,6 @@ void CreateGeometry()
 	normalBatch = GLBatch();
 	
 	modelBatch.Begin(GL_TRIANGLES,model.GetTriangleCount()*3);
-	// für jedes Triangle, mache ich 2 Vertex calls für jeden Vertex
-	// normalsToDraw enthält noch einen Index zu welchem Vertex-Index die Normale gehört
 	std::vector<std::vector<glm::vec3>> normalsToDraw;
 	std::vector <glm::vec3> batchNormals;
 	for (unsigned int i =0; i < model.GetTriangleCount();++i)
@@ -137,7 +135,6 @@ void CreateGeometry()
 				bool found = false;
 				for (unsigned int k = 0; k < normals.size(); k++)
 				{
-					// if the angle between the normals is less than the threshold, add the normal
 					float angle = glm::degrees(glm::acos(glm::dot(normals[k], normal)));
 					if (angle < 0.1f)
 					{
@@ -151,10 +148,10 @@ void CreateGeometry()
 				}
 			}
 
-			normal = glm::vec3(0, 0, 0);
 			std::vector<bool> used(normals.size(), false); // Verfolgung der verwendeten Normalen
 			std::vector<glm::vec3> normalsToAverage;
 
+			// Durchlaufe alle Normalen und finde diejenigen, die sich nur um den Grenzwinkel unterscheiden
 			for (int i = 0; i < normals.size(); i++) {
 				if (used[i]) continue;
 				normalsToAverage.clear();
@@ -179,7 +176,7 @@ void CreateGeometry()
 				normalsToDraw[point].push_back(averagedNormal);
 			}
 
-			// Ensure all unused normals are added to normalsToDraw
+			// Gehe sicher, dass alle Normalen verwendet werden
 			for (int i = 0; i < normals.size(); i++) {
 				if (!used[i]) {
 					normalsToDraw[point].push_back(normals[i]);
@@ -224,10 +221,20 @@ void CreateGeometry()
 	modelBatch.End();
 	normalBatch.End();
 	//Shader Programme laden.  Die letzen Argumente geben die Shader-Attribute an. Hier wird Vertex und Normale gebraucht.
-	shaders =  gltLoadShaderPairWithAttributes("VertexShader.glsl", "FragmentShader.glsl", 2, 
-		GLT_ATTRIBUTE_VERTEX, "vVertex", 
-		GLT_ATTRIBUTE_NORMAL, "vNormal");
+	if(bPhongShading && bSmoothShading)
+		shaders =  gltLoadShaderPairWithAttributes("PhongVertexShader.glsl", "PhongFragmentShader.glsl", 2, 
+					GLT_ATTRIBUTE_VERTEX, "vVertex", 
+					GLT_ATTRIBUTE_NORMAL, "vNormal");
+	else {
+		shaders = gltLoadShaderPairWithAttributes("VertexShader.glsl", "FragmentShader.glsl", 2,
+			GLT_ATTRIBUTE_VERTEX, "vVertex",
+			GLT_ATTRIBUTE_NORMAL, "vNormal");
+	}
 
+	if (shaders == 0) {
+		std::cerr << "Fehler beim Laden der Shader" << std::endl;
+		exit(1);
+	}
 	gltCheckErrors(shaders);
 	InitGUI();
 }
@@ -276,7 +283,7 @@ void RenderScene(void)
 	glUniform4fv(glGetUniformLocation(shaders, "ambient_color"),1,ambient_color);
 	glUniform4fv(glGetUniformLocation(shaders, "mat_diffuse"),1,mat_diffuse);
 	glUniform4fv(glGetUniformLocation(shaders, "mat_specular"),1,mat_specular);
-	if (previousGrenzWinkel != grenzWinkel || bPreviousSmoothShading != bSmoothShading) {
+	if (previousGrenzWinkel != grenzWinkel || bPreviousSmoothShading != bSmoothShading || bPreviousPhongShading != bPhongShading) {
 		previousGrenzWinkel = grenzWinkel;
 		normalBatch.~GLBatch();
 		modelBatch.~GLBatch();
@@ -286,6 +293,7 @@ void RenderScene(void)
 	modelBatch.Draw();
 	if (bShowNormals) normalBatch.Draw();
 	
+	bPreviousPhongShading = bPhongShading;
 	bPreviousSmoothShading = bSmoothShading;
 	// Hole die im Stack gespeicherten Transformationsmatrizen wieder zurück
 	modelViewMatrix.PopMatrix();
