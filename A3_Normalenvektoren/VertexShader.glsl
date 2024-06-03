@@ -35,39 +35,42 @@ uniform vec4 mat_specular;
 //Übergabe an den Fragment-Shader
 out vec4 color;
 void main()
-{	
-	
+{
 	// Transformiere Vertex von Objekt- in den Clip-Space
-	gl_Position = mvpMatrix * vVertex ;
+	gl_Position = mvpMatrix * vVertex;
 
-	// Transformiere Vertex von Object in den Eye-Space
+	// Transformiere Vertex von Objekt in den Eye-Space
 	vec4 vertex_vs = mvMatrix * vVertex;
-	
 	vec3 ecPos = vertex_vs.xyz / vertex_vs.w;
-	// Berechne Lichtrichtung in Eye-Space
-	
-	vec3 light_dir_vs = normalize(light_pos_vs.xyz-ecPos) ; // Punkt Lichtquelle
-  //vec3 light_dir_vs = normalize(vec3(light_pos_vs.xyz)); // gerichtetes Licht
+
+	// Berechne Lichtrichtung in Eye-Space abhängig von der w-Komponente der Lichtposition
+	vec3 light_dir_vs;
+	if (light_pos_vs.w == 0.0) {
+		// Richtungslichtquelle (w == 0)
+		light_dir_vs = normalize(light_pos_vs.xyz);
+	}
+	else {
+		// Punktlichtquelle (w != 0)
+		light_dir_vs = normalize(light_pos_vs.xyz - ecPos);
+	}
 
 	// Normalen von Objekt- in Eye-Space transformieren
-	vec3 normal_vs = normalize(normalMatrix * (vNormal).xyz) ;
-	
-	// Betrachtervektor in Eye-Space
-	  vec3 view_dir_vs = normalize( -ecPos ) ; // lokaler Betrachtervektor im Eye-Space
-    //vec3 light_dir_vs = vec3( 0.0, 0.0, 1.0); // infiniter Betrachtervektor im Eye-Space
+	vec3 normal_vs = normalize(normalMatrix * vNormal.xyz);
 
-	
+	// Betrachtervektor in Eye-Space
+	vec3 view_dir_vs = normalize(-ecPos);
+
 	// Halfway Vektor für das Phong-Blinn Beleuchtungsmodell berechnen
-	vec3 halfway_vs = normalize(view_dir_vs + light_dir_vs ) ;
-	
-	// Diffuser Term berechnen
-	float NdotL = max(dot(normal_vs, light_dir_vs),0.0) ;
-	vec4 diffuse_color = NdotL * mat_diffuse * light_diffuse ;
+	vec3 halfway_vs = normalize(view_dir_vs + light_dir_vs);
+
+	// Diffusen Term berechnen
+	float NdotL = max(dot(normal_vs, light_dir_vs), 0.0);
+	vec4 diffuse_color = NdotL * mat_diffuse * light_diffuse;
 
 	// Spekularen Term berechnen
-	float NdotH = max(dot(normal_vs, halfway_vs),0.0) ;
-	vec4 specular_color = pow(NdotH ,spec_power) * mat_specular * light_specular ;
+	float NdotH = max(dot(normal_vs, halfway_vs), 0.0);
+	vec4 specular_color = pow(NdotH, spec_power) * mat_specular * light_specular;
 
-	// Alle Fraben addieren
+	// Alle Farben addieren
 	color = emissive_color + ambient_color + diffuse_color + specular_color;
 }

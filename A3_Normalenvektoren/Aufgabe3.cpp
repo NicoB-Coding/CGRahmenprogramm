@@ -37,7 +37,6 @@ float mat_diffuse[] =  {1.0f,0,0};
 float mat_specular[] = {1.0f,1.0f,1.0f,1.0f};
 float specular_power = 10;
 
-
 GLMatrixStack modelViewMatrix;
 GLMatrixStack projectionMatrix;
 GLGeometryTransform transformPipeline;
@@ -49,8 +48,11 @@ GLBatch modelBatch;
 GLBatch normalBatch;
 obj::Model model;
 //Dateiname für das Modell.
-const std::string modelFile = "../Modelle/bunny.obj";
+const std::string modelFile = "../Modelle/cylinder.obj";
 GLuint shaders;
+GLuint uniform_block[2];
+GLuint binding_point_mat = 1;
+
 
 glm::quat rotation = glm::quat(0, 0, 0, 1);
 
@@ -58,6 +60,10 @@ TwBar *bar;
 
 float grenzWinkel = 45.0f;
 float previousGrenzWinkel = 45.0f;
+bool bInfiniteLight = true;
+bool bSmoothShading = true;
+bool bShowNormals = false;
+bool bPreviousSmoothShading = true;
 
 void TW_CALL angleSetCallback(const void * value, void * clientData)
 {
@@ -77,6 +83,15 @@ void InitGUI()
 	TwAddVarCB(bar,"Grenzwinkel", TW_TYPE_FLOAT,angleSetCallback, angleGetCallback,NULL, "min=0 max=180");
 	TwAddVarRW(bar,"Model Rotation",TW_TYPE_QUAT4F,&rotation,"");
     TwAddVarRW(bar, "Position", TW_TYPE_DIR3F, &light_pos, "group='Light' axisx=-x axisy=-y axisz=-z");
+	TwAddVarRW(bar, "Infinite Light?", TW_TYPE_BOOLCPP, &bInfiniteLight,"");
+	TwAddVarRW(bar, "Smooth Shading?", TW_TYPE_BOOLCPP, &bSmoothShading,"");
+	TwAddVarRW(bar, "Show Normals?", TW_TYPE_BOOLCPP, &bShowNormals,"");
+	// RGBA Slider
+	TwAddVarRW(bar, "Diffuse", TW_TYPE_COLOR4F, &light_diffuse, "group='Light'");
+	TwAddVarRW(bar, "Specular", TW_TYPE_COLOR4F, &light_specular, "group='Light'");
+	TwAddVarRW(bar, "Shininess", TW_TYPE_FLOAT, &specular_power, "group='Light' min=0");
+	TwAddVarRW(bar, "Emissive", TW_TYPE_COLOR4F, &emissive_color, "group='Light'");
+	TwAddVarRW(bar, "Ambient", TW_TYPE_COLOR4F, &ambient_color, "group='Light'");
 }
 void CreateGeometry()
 {
@@ -180,14 +195,26 @@ void CreateGeometry()
 				batchNormals.push_back(glm::vec3(tr->vertex[point].pos.x + 0.1f * normalsToDraw[point][i].x, tr->vertex[point].pos.y + 0.1f * normalsToDraw[point][i].y, tr->vertex[point].pos.z + 0.1f * normalsToDraw[point][i].z));
 			}
 		}
-		modelBatch.Normal3f(tr->vertex[0].normal.x,tr->vertex[0].normal.y,tr->vertex[0].normal.z);
-		modelBatch.Vertex3f(tr->vertex[0].pos.x,tr->vertex[0].pos.y,tr->vertex[0].pos.z);
+		if (bSmoothShading) {
+			for (int point = 0; point < 3; point++) {
+				modelBatch.Normal3f(normalsToDraw[point][0].x, normalsToDraw[point][0].y, normalsToDraw[point][0].z);
+				modelBatch.Vertex3f(tr->vertex[point].pos.x,tr->vertex[point].pos.y,tr->vertex[point].pos.z);
+			}
+		}
+		else {
+			// eine Normale für alle 3 Vertices
+			glm::vec3 edge1 = glm::vec3(tr->vertex[1].pos.x, tr->vertex[1].pos.y, tr->vertex[1].pos.z) - glm::vec3(tr->vertex[0].pos.x, tr->vertex[0].pos.y, tr->vertex[0].pos.z);
+			glm::vec3 edge2 = glm::vec3(tr->vertex[2].pos.x, tr->vertex[2].pos.y, tr->vertex[2].pos.z) - glm::vec3(tr->vertex[0].pos.x, tr->vertex[0].pos.y, tr->vertex[0].pos.z);
+			glm::vec3 normal = normalize(cross(edge1, edge2));
 
-		modelBatch.Normal3f(tr->vertex[1].normal.x,tr->vertex[1].normal.y,tr->vertex[1].normal.z);
-		modelBatch.Vertex3f(tr->vertex[1].pos.x,tr->vertex[1].pos.y,tr->vertex[1].pos.z);
-
-		modelBatch.Normal3f(tr->vertex[2].normal.x,tr->vertex[2].normal.y,tr->vertex[2].normal.z);
-		modelBatch.Vertex3f(tr->vertex[2].pos.x,tr->vertex[2].pos.y,tr->vertex[2].pos.z);
+			// Setze die Normale für alle Vertices des Dreiecks
+			modelBatch.Normal3f(normal.x, normal.y, normal.z);
+			modelBatch.Vertex3f(tr->vertex[0].pos.x, tr->vertex[0].pos.y, tr->vertex[0].pos.z);
+			modelBatch.Normal3f(normal.x, normal.y, normal.z);
+			modelBatch.Vertex3f(tr->vertex[1].pos.x, tr->vertex[1].pos.y, tr->vertex[1].pos.z);
+			modelBatch.Normal3f(normal.x, normal.y, normal.z);
+			modelBatch.Vertex3f(tr->vertex[2].pos.x, tr->vertex[2].pos.y, tr->vertex[2].pos.z);
+		}
 	}
 	normalBatch.Begin(GL_LINES, batchNormals.size());
 	for (int i = 0; i < batchNormals.size(); i += 2) {
@@ -232,7 +259,15 @@ void RenderScene(void)
 	glUniformMatrix4fv(glGetUniformLocation(shaders, "mvMatrix"),  1, GL_FALSE, transformPipeline.GetModelViewMatrix());
 	glUniformMatrix3fv(glGetUniformLocation(shaders, "normalMatrix"),  1, GL_FALSE, transformPipeline.GetNormalMatrix(true));
 	// Lichteigenschaften übergeben
-	glUniform4fv(glGetUniformLocation(shaders, "light_pos_vs"),1,light_pos);
+	if (!bInfiniteLight)
+	{
+		glUniform4fv(glGetUniformLocation(shaders, "light_pos_vs"),1,light_pos);
+	}
+	else
+	{
+		float infinite_light[4] = {light_pos[0],light_pos[1],light_pos[2],0};
+		glUniform4fv(glGetUniformLocation(shaders, "light_pos_vs"),1,infinite_light);
+	}
 	glUniform4fv(glGetUniformLocation(shaders, "light_diffuse"),1,light_diffuse);
 	glUniform4fv(glGetUniformLocation(shaders, "light_specular"),1,light_specular);
 	glUniform1f(glGetUniformLocation(shaders, "spec_power"),specular_power);
@@ -241,7 +276,7 @@ void RenderScene(void)
 	glUniform4fv(glGetUniformLocation(shaders, "ambient_color"),1,ambient_color);
 	glUniform4fv(glGetUniformLocation(shaders, "mat_diffuse"),1,mat_diffuse);
 	glUniform4fv(glGetUniformLocation(shaders, "mat_specular"),1,mat_specular);
-	if (previousGrenzWinkel != grenzWinkel) {
+	if (previousGrenzWinkel != grenzWinkel || bPreviousSmoothShading != bSmoothShading) {
 		previousGrenzWinkel = grenzWinkel;
 		normalBatch.~GLBatch();
 		modelBatch.~GLBatch();
@@ -249,8 +284,9 @@ void RenderScene(void)
 	}
 
 	modelBatch.Draw();
-	normalBatch.Draw();
+	if (bShowNormals) normalBatch.Draw();
 	
+	bPreviousSmoothShading = bSmoothShading;
 	// Hole die im Stack gespeicherten Transformationsmatrizen wieder zurück
 	modelViewMatrix.PopMatrix();
 	gltCheckErrors(shaders);
@@ -265,7 +301,7 @@ void RenderScene(void)
 void SetupRC()
 {
 	// Schwarzer Hintergrund
-	glClearColor(1.0f, 1.0f, 0.0f, 1.0f );
+	glClearColor(0.5f, 0.5f, 0.0f, 1.0f );
 	// In Uhrzeigerrichtung zeigende Polygone sind die Vorderseiten.
 	// Dies ist umgekehrt als bei der Default-Einstellung weil wir Triangle_Fans benützen
 	glFrontFace(GL_CCW);
