@@ -33,7 +33,7 @@ float light_specular[4] = {1.0f,1.0f,1.0f,1.0f} ;
 float emissive_color[] = {0,0,0,0};
 float ambient_color[] = {0.1f,0.1f,0.1f,0};
 /// Materialfarben
-float mat_diffuse[] =  {1.0f,0,0};
+float mat_diffuse[] =  {1.0f,1.0f,0, 0};
 float mat_specular[] = {1.0f,1.0f,1.0f,1.0f};
 float specular_power = 10;
 
@@ -87,8 +87,8 @@ void InitGUI()
 	TwAddVarRW(bar, "Phong Shading?", TW_TYPE_BOOLCPP, &bPhongShading, "");
 	TwAddVarRW(bar, "Show Normals?", TW_TYPE_BOOLCPP, &bShowNormals,"");
 	// RGBA Slider
-	TwAddVarRW(bar, "Diffuse", TW_TYPE_COLOR4F, &light_diffuse, "group='Light'");
-	TwAddVarRW(bar, "Specular", TW_TYPE_COLOR4F, &light_specular, "group='Light'");
+	TwAddVarRW(bar, "Diffuse", TW_TYPE_COLOR4F, &mat_diffuse, "group='Light'");
+	TwAddVarRW(bar, "Specular", TW_TYPE_COLOR4F, &mat_specular, "group='Light'");
 	TwAddVarRW(bar, "Shininess", TW_TYPE_FLOAT, &specular_power, "group='Light' min=0");
 	TwAddVarRW(bar, "Emissive", TW_TYPE_COLOR4F, &emissive_color, "group='Light'");
 	TwAddVarRW(bar, "Ambient", TW_TYPE_COLOR4F, &ambient_color, "group='Light'");
