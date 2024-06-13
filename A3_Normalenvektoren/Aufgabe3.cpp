@@ -15,6 +15,7 @@
 #include <ObjLoader/Model.h>
 #include <ObjLoader/Triangle.h>
 #include <ObjLoader/Vertex.h>
+#include <ImageLoader/ImageLoader.h>
 #include <GLTools.h>
 #include <GLMatrixStack.h>
 #include <GLGeometryTransform.h>
@@ -50,6 +51,8 @@ obj::Model model;
 //Dateiname für das Modell.
 const std::string modelFile = "../Modelle/cylinder.obj";
 GLuint shaders;
+GLuint textureID;
+unsigned char* textureData;
 
 glm::quat rotation = glm::quat(0, 0, 0, 1);
 
@@ -196,6 +199,7 @@ void CreateGeometry()
 			for (int point = 0; point < 3; point++) {
 				modelBatch.Normal3f(normalsToDraw[point][0].x, normalsToDraw[point][0].y, normalsToDraw[point][0].z);
 				modelBatch.Vertex3f(tr->vertex[point].pos.x,tr->vertex[point].pos.y,tr->vertex[point].pos.z);
+				//modelBatch.MultiTexCoord2f(textureID, tr->vertex[point].texCoord.x, tr->vertex[point].texCoord.y);
 			}
 		}
 		else {
@@ -226,9 +230,10 @@ void CreateGeometry()
 					GLT_ATTRIBUTE_VERTEX, "vVertex", 
 					GLT_ATTRIBUTE_NORMAL, "vNormal");
 	else {
-		shaders = gltLoadShaderPairWithAttributes("VertexShader.glsl", "FragmentShader.glsl", 2,
+		shaders = gltLoadShaderPairWithAttributes("VertexShader.glsl", "FragmentShader.glsl", 3,
 			GLT_ATTRIBUTE_VERTEX, "vVertex",
-			GLT_ATTRIBUTE_NORMAL, "vNormal");
+			GLT_ATTRIBUTE_NORMAL, "vNormal",
+			GLT_ATTRIBUTE_TEXTURE0, "vTexCoord");
 	}
 
 	if (shaders == 0) {
@@ -236,11 +241,15 @@ void CreateGeometry()
 		exit(1);
 	}
 	gltCheckErrors(shaders);
-	InitGUI();
 }
 
+unsigned char* loadTextureFromFile(const std::string& fileName, int* width, int* height, bool topDown = true)
+{
+	img::ImageLoader imgLoader;
+	unsigned char* data = imgLoader.LoadTextureFromFile(fileName, width, height, topDown);
+	return data;
+}
 
-// Aufruf draw scene
 void RenderScene(void)
 {
 	
@@ -254,6 +263,9 @@ void RenderScene(void)
 	// Speichere den matrix state und führe die Rotation durch
 	modelViewMatrix.PushMatrix();
 
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, textureID);
+
 
 	// Rotiere Objekt
 	glm::mat4 rot = glm::mat4_cast(glm::quat(rotation.z, rotation.w, rotation.x, rotation.y));
@@ -261,6 +273,10 @@ void RenderScene(void)
 
 	//setze den Shader für das Rendern
 	glUseProgram(shaders);
+
+	// Setze den Sampler Uniform auf die Textur-Einheit 0
+	glUniform1i(glGetUniformLocation(shaders, "texture1"), 0);
+
 	// Model View Projection Matrix setzen
 	glUniformMatrix4fv(glGetUniformLocation(shaders, "mvpMatrix"), 1, GL_FALSE, transformPipeline.GetModelViewProjectionMatrix());
 	glUniformMatrix4fv(glGetUniformLocation(shaders, "mvMatrix"),  1, GL_FALSE, transformPipeline.GetModelViewMatrix());
@@ -317,6 +333,24 @@ void SetupRC()
 	transformPipeline.SetMatrixStacks(modelViewMatrix,projectionMatrix);
 	//erzeuge die geometrie
 	CreateGeometry();
+	InitGUI();
+	int width, height = 256;
+	textureData = loadTextureFromFile("../Texturen/bitmaps/Ground.BMP", &width, &height, true);
+	if (textureData) {
+		glGenTextures(1, &textureID);
+		glBindTexture(GL_TEXTURE_2D, textureID);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_BGR, GL_UNSIGNED_BYTE, textureData);
+		glGenerateMipmap(GL_TEXTURE_2D);
+
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	}
+	else {
+		std::cerr << "Fehler beim Laden der Textur" << std::endl;
+		exit(1);
+	}
 }
 
 void ShutDownRC()

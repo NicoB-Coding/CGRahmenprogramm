@@ -13,27 +13,32 @@
 //Attribute 
 in vec4 vVertex;
 in vec4 vNormal;
+// Texturkoordinaten Attribut hinzufügen
+in vec2 vTexCoord;
 
 uniform mat4 mvpMatrix;
 uniform mat4 mvMatrix;
 uniform mat3 normalMatrix;
 /// Light position in Eye-Space
-uniform vec4 light_pos_vs ;
+uniform vec4 light_pos_vs;
 /// Light diffuse color
-uniform vec4 light_diffuse ;
+uniform vec4 light_diffuse;
 /// Light specular color
-uniform vec4 light_specular ;
+uniform vec4 light_specular;
 /// Specular power (shininess)
 uniform float spec_power;
 
 /// Material parameters
 uniform vec4 emissive_color;
 uniform vec4 ambient_color;
-uniform vec4 mat_diffuse ;
+uniform vec4 mat_diffuse;
 uniform vec4 mat_specular;
 
 //Übergabe an den Fragment-Shader
 out vec4 color;
+// Übergabe der Texturkoordinaten an den Fragment-Shader
+out vec2 TexCoord;
+
 void main()
 {
 	// Transformiere Vertex von Objekt- in den Clip-Space
@@ -73,4 +78,7 @@ void main()
 
 	// Alle Farben addieren
 	color = emissive_color + ambient_color + diffuse_color + specular_color;
+
+	// Übergabe der Texturkoordinaten
+	TexCoord = vTexCoord; // NEU: Texturkoordinaten an den Fragment-Shader übergeben
 }
