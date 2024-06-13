@@ -98,149 +98,191 @@ void InitGUI()
 }
 void CreateGeometry()
 {
-	//Modell laden und Batch erzeugen.
-	model.Load(modelFile);
-	normalBatch.Reset();
-	modelBatch.Reset();
-	modelBatch = GLBatch();
-	normalBatch = GLBatch();
-	
-	modelBatch.Begin(GL_TRIANGLES,model.GetTriangleCount()*3);
-	std::vector<std::vector<glm::vec3>> normalsToDraw;
-	std::vector <glm::vec3> batchNormals;
-	for (unsigned int i =0; i < model.GetTriangleCount();++i)
-	{
-		normalsToDraw.clear();
-		normalsToDraw.resize(3);
-		obj::Triangle* tr = model.GetTriangle(i);
-		std::vector<glm::vec3> normals; // Liste der einzigartigen normalen
-		for (int point = 0; point < 3; point++) {
-			normals.clear();
-			// Kreuzprodukt der Kanten
-			glm::vec3 edge1 = glm::vec3(tr->vertex[1].pos.x - tr->vertex[0].pos.x, tr->vertex[1].pos.y - tr->vertex[0].pos.y, tr->vertex[1].pos.z - tr->vertex[0].pos.z);
-			glm::vec3 edge2 = glm::vec3(tr->vertex[2].pos.x - tr->vertex[0].pos.x, tr->vertex[2].pos.y - tr->vertex[0].pos.y, tr->vertex[2].pos.z - tr->vertex[0].pos.z);
-			glm::vec3 normal = glm::normalize(glm::cross(edge1, edge2));
-			normals.push_back(normal);
+    // Modell laden und Batch erzeugen
+    model.Load(modelFile);
+    normalBatch.Reset();
+    modelBatch.Reset();
+    modelBatch = GLBatch();
+    normalBatch = GLBatch();
 
-			obj::Model::PrimitiveCollection adjacentTriangles;
+    modelBatch.Begin(GL_TRIANGLES, model.GetTriangleCount() * 3, 1);
 
-			obj::Vertex* v = &tr->vertex[point];
-			model.GetAdjacentTriangles(adjacentTriangles, v);
+    // Berechne die minimalen und maximalen Koordinaten des Modells
+    glm::vec3 minCoords(FLT_MAX, FLT_MAX, FLT_MAX);
+    glm::vec3 maxCoords(FLT_MIN, FLT_MIN, FLT_MIN);
 
-			// suche die anliegenden Normalen heraus
-			for (unsigned int j = 0; j < adjacentTriangles.size(); j++)
-			{
-				obj::Triangle* adjTr = adjacentTriangles[j];
-				// Kreuzprodukt der Kanten
-				glm::vec3 edge1 = glm::vec3(adjTr->vertex[1].pos.x - adjTr->vertex[0].pos.x, adjTr->vertex[1].pos.y - adjTr->vertex[0].pos.y, adjTr->vertex[1].pos.z - adjTr->vertex[0].pos.z);
-				glm::vec3 edge2 = glm::vec3(adjTr->vertex[2].pos.x - adjTr->vertex[0].pos.x, adjTr->vertex[2].pos.y - adjTr->vertex[0].pos.y, adjTr->vertex[2].pos.z - adjTr->vertex[0].pos.z);
-				glm::vec3 normal = glm::normalize(glm::cross(edge1, edge2));
-				bool found = false;
-				for (unsigned int k = 0; k < normals.size(); k++)
-				{
-					float angle = glm::degrees(glm::acos(glm::dot(normals[k], normal)));
-					if (angle < 0.1f)
-					{
-						found = true;
-						break;
-					}
-				}
-				if (!found)
-				{
-					normals.push_back(normal);
-				}
-			}
+    for (unsigned int i = 0; i < model.GetTriangleCount(); ++i)
+    {
+        obj::Triangle* tr = model.GetTriangle(i);
+        for (int point = 0; point < 3; ++point)
+        {
+            glm::vec3 pos(tr->vertex[point].pos.x, tr->vertex[point].pos.y, tr->vertex[point].pos.z);
+            minCoords = glm::min(minCoords, pos);
+            maxCoords = glm::max(maxCoords, pos);
+        }
+    }
 
-			std::vector<bool> used(normals.size(), false); // Verfolgung der verwendeten Normalen
-			std::vector<glm::vec3> normalsToAverage;
+    std::vector<std::vector<glm::vec3>> normalsToDraw;
+    std::vector<glm::vec3> batchNormals;
+    for (unsigned int i = 0; i < model.GetTriangleCount(); ++i)
+    {
+        normalsToDraw.clear();
+        normalsToDraw.resize(3);
+        obj::Triangle* tr = model.GetTriangle(i);
+        std::vector<glm::vec3> normals; // Liste der einzigartigen normalen
 
-			// Durchlaufe alle Normalen und finde diejenigen, die sich nur um den Grenzwinkel unterscheiden
-			for (int i = 0; i < normals.size(); i++) {
-				if (used[i]) continue;
-				normalsToAverage.clear();
-				normalsToAverage.push_back(normals[i]);
-				used[i] = true;
+        for (int point = 0; point < 3; ++point)
+        {
+            normals.clear();
+            // Kreuzprodukt der Kanten
+            glm::vec3 edge1 = glm::vec3(tr->vertex[1].pos.x - tr->vertex[0].pos.x, tr->vertex[1].pos.y - tr->vertex[0].pos.y, tr->vertex[1].pos.z - tr->vertex[0].pos.z);
+            glm::vec3 edge2 = glm::vec3(tr->vertex[2].pos.x - tr->vertex[0].pos.x, tr->vertex[2].pos.y - tr->vertex[0].pos.y, tr->vertex[2].pos.z - tr->vertex[0].pos.z);
+            glm::vec3 normal = glm::normalize(glm::cross(edge1, edge2));
+            normals.push_back(normal);
 
-				for (int j = i + 1; j < normals.size(); j++) {
-					if (used[j]) continue;
-					float angle = glm::degrees(glm::acos(glm::dot(normals[i], normals[j])));
-					if (angle < grenzWinkel) {
-						normalsToAverage.push_back(normals[j]);
-						used[j] = true;
-					}
-				}
+            obj::Model::PrimitiveCollection adjacentTriangles;
+            obj::Vertex* v = &tr->vertex[point];
+            model.GetAdjacentTriangles(adjacentTriangles, v);
 
-				glm::vec3 averagedNormal = glm::vec3(0, 0, 0);
-				for (const auto& n : normalsToAverage) {
-					averagedNormal += n;
-				}
-				averagedNormal = glm::normalize(averagedNormal);
+            // Suche die anliegenden Normalen heraus
+            for (unsigned int j = 0; j < adjacentTriangles.size(); ++j)
+            {
+                obj::Triangle* adjTr = adjacentTriangles[j];
+                // Kreuzprodukt der Kanten
+                glm::vec3 edge1 = glm::vec3(adjTr->vertex[1].pos.x - adjTr->vertex[0].pos.x, adjTr->vertex[1].pos.y - adjTr->vertex[0].pos.y, adjTr->vertex[1].pos.z - adjTr->vertex[0].pos.z);
+                glm::vec3 edge2 = glm::vec3(adjTr->vertex[2].pos.x - adjTr->vertex[0].pos.x, adjTr->vertex[2].pos.y - adjTr->vertex[0].pos.y, adjTr->vertex[2].pos.z - adjTr->vertex[0].pos.z);
+                glm::vec3 normal = glm::normalize(glm::cross(edge1, edge2));
+                bool found = false;
+                for (unsigned int k = 0; k < normals.size(); ++k)
+                {
+                    float angle = glm::degrees(glm::acos(glm::dot(normals[k], normal)));
+                    if (angle < 0.1f)
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                {
+                    normals.push_back(normal);
+                }
+            }
 
-				normalsToDraw[point].push_back(averagedNormal);
-			}
+            std::vector<bool> used(normals.size(), false); // Verfolgung der verwendeten Normalen
+            std::vector<glm::vec3> normalsToAverage;
 
-			// Gehe sicher, dass alle Normalen verwendet werden
-			for (int i = 0; i < normals.size(); i++) {
-				if (!used[i]) {
-					normalsToDraw[point].push_back(normals[i]);
-				}
-			}
+            // Durchlaufe alle Normalen und finde diejenigen, die sich nur um den Grenzwinkel unterscheiden
+            for (int i = 0; i < normals.size(); ++i)
+            {
+                if (used[i]) continue;
+                normalsToAverage.clear();
+                normalsToAverage.push_back(normals[i]);
+                used[i] = true;
 
-		}
+                for (int j = i + 1; j < normals.size(); ++j)
+                {
+                    if (used[j]) continue;
+                    float angle = glm::degrees(glm::acos(glm::dot(normals[i], normals[j])));
+                    if (angle < grenzWinkel)
+                    {
+                        normalsToAverage.push_back(normals[j]);
+                        used[j] = true;
+                    }
+                }
 
-		// durchlaufe normalsToDraw und füge die normalen in den Batch ein
-		for (int point = 0; point < 3; point++) {
-			for (int i = 0; i < normalsToDraw[point].size(); i++) {
-				batchNormals.push_back(glm::vec3(tr->vertex[point].pos.x, tr->vertex[point].pos.y, tr->vertex[point].pos.z));
-				batchNormals.push_back(glm::vec3(tr->vertex[point].pos.x + 0.1f * normalsToDraw[point][i].x, tr->vertex[point].pos.y + 0.1f * normalsToDraw[point][i].y, tr->vertex[point].pos.z + 0.1f * normalsToDraw[point][i].z));
-			}
-		}
-		if (bSmoothShading) {
-			for (int point = 0; point < 3; point++) {
-				modelBatch.Normal3f(normalsToDraw[point][0].x, normalsToDraw[point][0].y, normalsToDraw[point][0].z);
-				modelBatch.Vertex3f(tr->vertex[point].pos.x,tr->vertex[point].pos.y,tr->vertex[point].pos.z);
-				//modelBatch.MultiTexCoord2f(textureID, tr->vertex[point].texCoord.x, tr->vertex[point].texCoord.y);
-			}
-		}
-		else {
-			// eine Normale für alle 3 Vertices
-			glm::vec3 edge1 = glm::vec3(tr->vertex[1].pos.x, tr->vertex[1].pos.y, tr->vertex[1].pos.z) - glm::vec3(tr->vertex[0].pos.x, tr->vertex[0].pos.y, tr->vertex[0].pos.z);
-			glm::vec3 edge2 = glm::vec3(tr->vertex[2].pos.x, tr->vertex[2].pos.y, tr->vertex[2].pos.z) - glm::vec3(tr->vertex[0].pos.x, tr->vertex[0].pos.y, tr->vertex[0].pos.z);
-			glm::vec3 normal = normalize(cross(edge1, edge2));
+                glm::vec3 averagedNormal = glm::vec3(0, 0, 0);
+                for (const auto& n : normalsToAverage)
+                {
+                    averagedNormal += n;
+                }
+                averagedNormal = glm::normalize(averagedNormal);
+                normalsToDraw[point].push_back(averagedNormal);
+            }
 
-			// Setze die Normale für alle Vertices des Dreiecks
-			modelBatch.Normal3f(normal.x, normal.y, normal.z);
-			modelBatch.Vertex3f(tr->vertex[0].pos.x, tr->vertex[0].pos.y, tr->vertex[0].pos.z);
-			modelBatch.Normal3f(normal.x, normal.y, normal.z);
-			modelBatch.Vertex3f(tr->vertex[1].pos.x, tr->vertex[1].pos.y, tr->vertex[1].pos.z);
-			modelBatch.Normal3f(normal.x, normal.y, normal.z);
-			modelBatch.Vertex3f(tr->vertex[2].pos.x, tr->vertex[2].pos.y, tr->vertex[2].pos.z);
-		}
-	}
-	normalBatch.Begin(GL_LINES, batchNormals.size());
-	for (int i = 0; i < batchNormals.size(); i += 2) {
-		normalBatch.Vertex3f(batchNormals[i].x, batchNormals[i].y, batchNormals[i].z);
-		normalBatch.Vertex3f(batchNormals[i + 1].x, batchNormals[i + 1].y, batchNormals[i + 1].z);
-	}
-	modelBatch.End();
-	normalBatch.End();
-	//Shader Programme laden.  Die letzen Argumente geben die Shader-Attribute an. Hier wird Vertex und Normale gebraucht.
-	if(bPhongShading && bSmoothShading)
-		shaders =  gltLoadShaderPairWithAttributes("PhongVertexShader.glsl", "PhongFragmentShader.glsl", 2, 
-					GLT_ATTRIBUTE_VERTEX, "vVertex", 
-					GLT_ATTRIBUTE_NORMAL, "vNormal");
-	else {
-		shaders = gltLoadShaderPairWithAttributes("VertexShader.glsl", "FragmentShader.glsl", 3,
-			GLT_ATTRIBUTE_VERTEX, "vVertex",
-			GLT_ATTRIBUTE_NORMAL, "vNormal",
-			GLT_ATTRIBUTE_TEXTURE0, "vTexCoord");
-	}
+            // Gehe sicher, dass alle Normalen verwendet werden
+            for (int i = 0; i < normals.size(); ++i)
+            {
+                if (!used[i])
+                {
+                    normalsToDraw[point].push_back(normals[i]);
+                }
+            }
+        }
 
-	if (shaders == 0) {
-		std::cerr << "Fehler beim Laden der Shader" << std::endl;
-		exit(1);
-	}
-	gltCheckErrors(shaders);
+        // Durchlaufe normalsToDraw und füge die normalen in den Batch ein
+        for (int point = 0; point < 3; ++point)
+        {
+            for (int i = 0; i < normalsToDraw[point].size(); ++i)
+            {
+                batchNormals.push_back(glm::vec3(tr->vertex[point].pos.x, tr->vertex[point].pos.y, tr->vertex[point].pos.z));
+                batchNormals.push_back(glm::vec3(tr->vertex[point].pos.x + 0.1f * normalsToDraw[point][i].x, tr->vertex[point].pos.y + 0.1f * normalsToDraw[point][i].y, tr->vertex[point].pos.z + 0.1f * normalsToDraw[point][i].z));
+            }
+        }
+
+        // Berechne die Texturkoordinaten auf Basis der Positionen
+        for (int point = 0; point < 3; ++point)
+        {
+            glm::vec3 pos = glm::vec3(tr->vertex[point].pos.x, tr->vertex[point].pos.y, tr->vertex[point].pos.z);
+            glm::vec2 texCoord;
+            texCoord.x = (pos.x - minCoords.x) / (maxCoords.x - minCoords.x);
+            texCoord.y = (pos.y - minCoords.y) / (maxCoords.y - minCoords.y);
+
+            if (bSmoothShading)
+            {
+                modelBatch.Normal3f(normalsToDraw[point][0].x, normalsToDraw[point][0].y, normalsToDraw[point][0].z);
+                modelBatch.MultiTexCoord2f(0, texCoord.x, texCoord.y);
+                modelBatch.Vertex3f(tr->vertex[point].pos.x, tr->vertex[point].pos.y, tr->vertex[point].pos.z);
+            }
+            else
+            {
+                // Eine Normale für alle 3 Vertices
+                glm::vec3 edge1 = glm::vec3(tr->vertex[1].pos.x, tr->vertex[1].pos.y, tr->vertex[1].pos.z) - glm::vec3(tr->vertex[0].pos.x, tr->vertex[0].pos.y, tr->vertex[0].pos.z);
+                glm::vec3 edge2 = glm::vec3(tr->vertex[2].pos.x, tr->vertex[2].pos.y, tr->vertex[2].pos.z) - glm::vec3(tr->vertex[0].pos.x, tr->vertex[0].pos.y, tr->vertex[0].pos.z);
+                glm::vec3 normal = glm::normalize(glm::cross(edge1, edge2));
+
+                // Setze die Normale und Texturkoordinaten für alle Vertices des Dreiecks
+                modelBatch.Normal3f(normal.x, normal.y, normal.z);
+                modelBatch.Vertex3f(tr->vertex[0].pos.x, tr->vertex[0].pos.y, tr->vertex[0].pos.z);
+
+                modelBatch.Normal3f(normal.x, normal.y, normal.z);
+                modelBatch.Vertex3f(tr->vertex[1].pos.x, tr->vertex[1].pos.y, tr->vertex[1].pos.z);
+
+                modelBatch.Normal3f(normal.x, normal.y, normal.z);
+                modelBatch.Vertex3f(tr->vertex[2].pos.x, tr->vertex[2].pos.y, tr->vertex[2].pos.z);
+            }
+        }
+    }
+
+    normalBatch.Begin(GL_LINES, batchNormals.size());
+    for (int i = 0; i < batchNormals.size(); i += 2)
+    {
+        normalBatch.Vertex3f(batchNormals[i].x, batchNormals[i].y, batchNormals[i].z);
+        normalBatch.Vertex3f(batchNormals[i + 1].x, batchNormals[i + 1].y, batchNormals[i + 1].z);
+    }
+    modelBatch.End();
+    normalBatch.End();
+
+    // Shader Programme laden. Die letzten Argumente geben die Shader-Attribute an. Hier wird Vertex und Normale gebraucht.
+    if (bPhongShading && bSmoothShading)
+    {
+        shaders = gltLoadShaderPairWithAttributes("PhongVertexShader.glsl", "PhongFragmentShader.glsl", 2,
+            GLT_ATTRIBUTE_VERTEX, "vVertex",
+            GLT_ATTRIBUTE_NORMAL, "vNormal");
+    }
+    else
+    {
+        shaders = gltLoadShaderPairWithAttributes("VertexShader.glsl", "FragmentShader.glsl", 3,
+            GLT_ATTRIBUTE_VERTEX, "vVertex",
+            GLT_ATTRIBUTE_NORMAL, "vNormal",
+            GLT_ATTRIBUTE_TEXTURE0, "vTexCoord");
+    }
+
+    if (shaders == 0)
+    {
+        std::cerr << "Fehler beim Laden der Shader" << std::endl;
+        exit(1);
+    }
+    gltCheckErrors(shaders);
 }
 
 unsigned char* loadTextureFromFile(const std::string& fileName, int* width, int* height, bool topDown = true)
@@ -331,26 +373,30 @@ void SetupRC()
 	glFrontFace(GL_CCW);
 	shaderManager.InitializeStockShaders();
 	transformPipeline.SetMatrixStacks(modelViewMatrix,projectionMatrix);
-	//erzeuge die geometrie
-	CreateGeometry();
-	InitGUI();
-	int width, height = 256;
-	textureData = loadTextureFromFile("../Texturen/bitmaps/Ground.BMP", &width, &height, true);
+
+	int width, height;
+	textureData = loadTextureFromFile("../Texturen/bitmaps/Floor.BMP", &width, &height, true);
 	if (textureData) {
 		glGenTextures(1, &textureID);
 		glBindTexture(GL_TEXTURE_2D, textureID);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_BGR, GL_UNSIGNED_BYTE, textureData);
 		glGenerateMipmap(GL_TEXTURE_2D);
-
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        // keine Wiederholung der Textur, nicht strecken
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        // Texturfilterung
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		free(textureData); 
 	}
 	else {
 		std::cerr << "Fehler beim Laden der Textur" << std::endl;
 		exit(1);
 	}
+
+	//erzeuge die geometrie
+	CreateGeometry();
+	InitGUI();
 }
 
 void ShutDownRC()
