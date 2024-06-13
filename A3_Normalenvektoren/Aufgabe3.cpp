@@ -402,6 +402,7 @@ void SetupRC()
 void ShutDownRC()
 {
 	glDeleteProgram(shaders);
+    glDeleteTextures(1, &textureID);
 	TwTerminate();
 	
 }
