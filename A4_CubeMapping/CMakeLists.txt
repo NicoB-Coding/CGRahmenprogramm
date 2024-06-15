@@ -3,6 +3,8 @@ SET(PROJECT_NAME A4_CubeMapping)
 set(SOURCES CubeMapping.cpp
 			VertexShader.glsl
 			FragmentShader.glsl
+			SkyboxVertexShader.glsl
+			SkyboxFragmentShader.glsl
 		
 )
 set(LIBRARIES GLTools ObjLoader ImageLoader AntTweakBar freeglut)

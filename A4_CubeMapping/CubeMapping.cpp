@@ -27,9 +27,10 @@ GLGeometryTransform transformPipeline;
 GLFrustum viewFrustum;
 
 GLuint shaders;
+GLuint skyboxShader;
 GLTriangleBatch sphereBig;
 GLTriangleBatch sphereSmall;
-
+GLBatch skyboxBatch;
 
 //Textur Id für die Cube-Map
 GLuint cubeMapTex = 0 ;
@@ -61,6 +62,7 @@ void CreateGeometry()
 {
 	gltMakeSphere(sphereBig,0.4f,30,30);
 	gltMakeSphere(sphereSmall,0.2f,30,30);
+	gltMakeCube(skyboxBatch, 4.0f);
 
 	//Shader Programme laden. Die letzen Argumente geben die Shader-Attribute an. Hier wird Vertex und Normale gebraucht.
 	//Fürs Texture Mapping benötigt man als drittes Vertex-Attribut die Texturkoordinaten, die man z.B. über die Erweiterung 
@@ -69,55 +71,151 @@ void CreateGeometry()
      shaders =  gltLoadShaderPairWithAttributes("VertexShader.glsl", "FragmentShader.glsl", 2,
          GLT_ATTRIBUTE_VERTEX, "vVertex",
          GLT_ATTRIBUTE_NORMAL, "vNormal");
+	 skyboxShader = gltLoadShaderPairWithAttributes("SkyboxVertexShader.glsl", "SkyboxFragmentShader.glsl", 1,
+		 GLT_ATTRIBUTE_VERTEX, "vVertex");
 
 	gltCheckErrors(shaders);
+	gltCheckErrors(skyboxShader);
+}
+void CheckShaderCompileError(GLuint shader) {
+	GLint compiled;
+	glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+	if (!compiled) {
+		GLint infoLen = 0;
+		glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLen);
+		if (infoLen > 1) {
+			char* infoLog = (char*)malloc(sizeof(char) * infoLen);
+			glGetShaderInfoLog(shader, infoLen, NULL, infoLog);
+			printf("Error compiling shader:\n%s\n", infoLog);
+			free(infoLog);
+		}
+		glDeleteShader(shader);
+	}
+}
+
+void CheckGLError(const char* stmt, const char* fname, int line)
+{
+	GLenum err = glGetError();
+	while (err != GL_NO_ERROR)
+	{
+		const char* error;
+		switch (err)
+		{
+		case GL_INVALID_OPERATION:      error = "INVALID_OPERATION";      break;
+		case GL_INVALID_ENUM:           error = "INVALID_ENUM";           break;
+		case GL_INVALID_VALUE:          error = "INVALID_VALUE";          break;
+		case GL_OUT_OF_MEMORY:          error = "OUT_OF_MEMORY";          break;
+		case GL_INVALID_FRAMEBUFFER_OPERATION:  error = "INVALID_FRAMEBUFFER_OPERATION";  break;
+		default:                        error = "Unknown Error";          break;
+		}
+		printf("OpenGL error [%s] (%s:%d): %s\n", error, fname, line, stmt);
+		err = glGetError();
+	}
+}
+
+#define GL_CHECK(stmt) do { \
+        stmt; \
+        CheckGLError(#stmt, __FILE__, __LINE__); \
+    } while (0)
+
+
+glm::mat4 ConvertToMat4(const M3DMatrix44f m)
+{
+	return glm::mat4(
+		m[0], m[1], m[2], m[3],
+		m[4], m[5], m[6], m[7],
+		m[8], m[9], m[10], m[11],
+		m[12], m[13], m[14], m[15]
+	);
 }
 
 // Aufruf draw scene
 void RenderScene(void)
 {
 	// Clearbefehle für den color buffer und den depth buffer
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	GL_CHECK(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
-	glEnable(GL_DEPTH_TEST);
-	
-	// Speichere den matrix state und führe die Rotation durch
-	modelViewMatrix.PushMatrix();
-	glm::mat4 rot = glm::mat4_cast(glm::quat(rotation.z, rotation.w, rotation.x, rotation.y));
-	modelViewMatrix.MultMatrix(glm::value_ptr(rot));
+	GL_CHECK(glEnable(GL_DEPTH_TEST));
 
 	// Aktivieren der automatischen Texturkoordinaten-Generierung
 	static GLfloat s[] = { 0.1f, 0.0f, 0.0f, 0.0f };
 	static GLfloat t[] = { 0.0f, 0.1f, 0.0f, 0.0f };
 	static GLfloat r[] = { 0.0f, 0.0f, 0.1f, 0.0f };
-	
-	glUniform4fv(glGetUniformLocation(shaders, "ObjectPlaneS"), 1, s);
-	glUniform4fv(glGetUniformLocation(shaders, "ObjectPlaneT"), 1, t);
-	glUniform4fv(glGetUniformLocation(shaders, "ObjectPlaneR"), 1, r);
 
-	glBindTexture(GL_TEXTURE_CUBE_MAP,cubeMapTex);
-	//setze den Shader für das Rendern
-	glUseProgram(shaders);
+	GL_CHECK(glUseProgram(skyboxShader));
+	// Speichere den matrix state und führe die Rotation durch
+	modelViewMatrix.PushMatrix();
+	glm::mat4 rot = glm::mat4_cast(glm::quat(rotation.z, rotation.w, rotation.x, rotation.y));
+	// Model View Projection Matrix setzen
+	modelViewMatrix.PushMatrix();
 
+	modelViewMatrix.MultMatrix(glm::value_ptr(rot));
+	glm::mat4 mvpMatrix = ConvertToMat4(transformPipeline.GetModelViewProjectionMatrix());
+	GL_CHECK(glUniformMatrix4fv(glGetUniformLocation(skyboxShader, "mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix)));
+	GL_CHECK(glUniform4fv(glGetUniformLocation(skyboxShader, "ObjectPlaneS"), 1, s));
+	GL_CHECK(glUniform4fv(glGetUniformLocation(skyboxShader, "ObjectPlaneT"), 1, t));
+	GL_CHECK(glUniform4fv(glGetUniformLocation(skyboxShader, "ObjectPlaneR"), 1, r));
+
+	GL_CHECK(glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTex));
+	skyboxBatch.Draw();
+
+	modelViewMatrix.PopMatrix();
+
+	// Set up transformation for the objects
+	GL_CHECK(glUseProgram(shaders));
+	modelViewMatrix.MultMatrix(glm::value_ptr(rot));
+
+	glm::mat4 mvM = ConvertToMat4(transformPipeline.GetModelViewMatrix());
+	glm::mat4 projectionMatrix = ConvertToMat4(transformPipeline.GetProjectionMatrix());
+	mvpMatrix = ConvertToMat4(transformPipeline.GetModelViewProjectionMatrix());
+
+	glm::mat3 invRotMatrix = glm::transpose(glm::mat3(mvM));
+	glm::mat4 textureMatrix = glm::mat4(1.0f); // Einheitsmatrix
+	textureMatrix = glm::mat4(
+		invRotMatrix[0][0], invRotMatrix[0][1], invRotMatrix[0][2], 0.0f,
+		invRotMatrix[1][0], invRotMatrix[1][1], invRotMatrix[1][2], 0.0f,
+		invRotMatrix[2][0], invRotMatrix[2][1], invRotMatrix[2][2], 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f
+	);
+
+	// Extrahiere die oberen 3x3 Komponenten der modelViewMatrix
+	glm::mat3 normalMatrix = glm::mat3(
+		mvM[0][0], mvM[0][1], mvM[0][2],
+		mvM[1][0], mvM[1][1], mvM[1][2],
+		mvM[2][0], mvM[2][1], mvM[2][2]
+	);
+	normalMatrix = glm::transpose(glm::inverse(normalMatrix));
+
+	// Set uniform values for matrices
+	GL_CHECK(glUniformMatrix4fv(glGetUniformLocation(shaders, "modelViewMatrix"), 1, GL_FALSE, glm::value_ptr(mvM)));
+	GL_CHECK(glUniformMatrix4fv(glGetUniformLocation(shaders, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(projectionMatrix)));
+	GL_CHECK(glUniformMatrix4fv(glGetUniformLocation(shaders, "mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix)));
+	GL_CHECK(glUniformMatrix3fv(glGetUniformLocation(shaders, "normalMatrix"), 1, GL_FALSE, glm::value_ptr(normalMatrix)));
+
+	// Übergebe die Texturmatrix als Uniform an den Shader
+	GL_CHECK(glUniformMatrix4fv(glGetUniformLocation(shaders, "textureMatrix"), 1, GL_FALSE, glm::value_ptr(textureMatrix)));
+
+	GL_CHECK(glUniform4fv(glGetUniformLocation(shaders, "ObjectPlaneS"), 1, s));
+	GL_CHECK(glUniform4fv(glGetUniformLocation(shaders, "ObjectPlaneT"), 1, t));
+	GL_CHECK(glUniform4fv(glGetUniformLocation(shaders, "ObjectPlaneR"), 1, r));
 
 	// Model View Projection Matrix setzen
-	glUniformMatrix4fv(glGetUniformLocation(shaders, "mvpMatrix"), 1, GL_FALSE, transformPipeline.GetModelViewProjectionMatrix());	
-	//Zeichne Model
+	// Zeichne Model
 	sphereBig.Draw();
 	modelViewMatrix.PushMatrix();
-	modelViewMatrix.Translate(0.6f,0.6f,0.6f);
-	glUniformMatrix4fv(glGetUniformLocation(shaders, "mvpMatrix"), 1, GL_FALSE, transformPipeline.GetModelViewProjectionMatrix());
+	modelViewMatrix.Translate(0.6f, 0.6f, 0.6f);
+	GL_CHECK(glUniformMatrix4fv(glGetUniformLocation(shaders, "mvpMatrix"), 1, GL_FALSE, transformPipeline.GetModelViewProjectionMatrix()));
 	sphereSmall.Draw();
 	modelViewMatrix.PopMatrix();
 
 	// Hole die im Stack gespeicherten Transformationsmatrizen wieder zurück
 	modelViewMatrix.PopMatrix();
 	gltCheckErrors(shaders);
-	
+
 	TwDraw();
 	// Vertausche Front- und Backbuffer
-	glutSwapBuffers();
-	glutPostRedisplay();
+	GL_CHECK(glutSwapBuffers());
+	GL_CHECK(glutPostRedisplay());
 }
 
 // Initialisierung des Rendering Kontextes
@@ -162,6 +260,7 @@ void ShutDownRC()
 {
 	//Aufräumen
 	glDeleteProgram(shaders);
+	glDeleteProgram(skyboxShader);
 	glDeleteTextures(1,&cubeMapTex);
 
 	TwTerminate();

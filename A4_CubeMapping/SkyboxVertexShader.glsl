@@ -24,12 +24,13 @@ uniform vec4 ObjectPlaneT;
 uniform vec4 ObjectPlaneR;
 
 void main()
-{	
-	gl_Position = mvpMatrix * vVertex ;
-	//TODO texcoords bestimmen.
+{
+    gl_Position = mvpMatrix * vVertex;
+
+    // Texcoords für Cube sind in Weltkoordinaten
 	texCoords = vec3(
-		dot(gl_Position, ObjectPlaneS),
-		dot(gl_Position, ObjectPlaneT),
-		dot(gl_Position, ObjectPlaneR)
+		dot(vVertex, ObjectPlaneS),
+		dot(vVertex, ObjectPlaneT),
+		dot(vVertex, ObjectPlaneR)
 	);
 }
